@@ -1,0 +1,12 @@
+# intune-bulk-tools config template
+# Copy to ibt.cfg and replace placeholder values.
+# Environment variables override values from ibt.cfg.
+
+INTUNE_AUTH_MODE=interactive
+INTUNE_TENANT_ID=your-tenant-guid
+INTUNE_CLIENT_ID=your-client-guid
+INTUNE_REDIRECT_URI=http://localhost
+
+# Optional:
+# INTUNE_SCOPES=Group.Read.All,DeviceManagementManagedDevices.Read.All,DeviceManagementManagedDevices.PrivilegedOperations.All
+# INTUNE_CONFIG_FILE=C:\path\to\custom\ibt.cfg
