@@ -19,25 +19,27 @@ CLI-first Java scaffold for performing bulk actions on Intune-enrolled devices v
 ```bash
 java -jar target/intune-bulk-actions-0.1.0.jar --help
 java -jar target/intune-bulk-actions-0.1.0.jar shell
+java -jar target/intune-bulk-actions-0.1.0.jar gui
+java -jar target/intune-bulk-actions-0.1.0.jar --gui
 java -jar target/intune-bulk-actions-0.1.0.jar bulk sync --groupId <GUID> --dryRun
 ```
 
 ## Auth
 Two easy options:
 
-- Device code (recommended default; works without app redirect URI setup):
-
-```powershell
-$env:INTUNE_AUTH_MODE="device_code"
-java -jar target/intune-bulk-actions-0.1.0.jar shell
-```
-
-- Interactive browser login (requires an app registration + redirect URI):
+- Interactive browser login (default mode; requires an app registration + redirect URI):
 
 ```powershell
 $env:INTUNE_AUTH_MODE="interactive"
 $env:INTUNE_CLIENT_ID="<client-id>"
 $env:INTUNE_REDIRECT_URI="http://localhost"  # must be registered on the app
+java -jar target/intune-bulk-actions-0.1.0.jar shell
+```
+
+- Device code (works without app redirect URI setup):
+
+```powershell
+$env:INTUNE_AUTH_MODE="device_code"
 java -jar target/intune-bulk-actions-0.1.0.jar shell
 ```
 

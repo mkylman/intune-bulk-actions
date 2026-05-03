@@ -6,6 +6,7 @@ C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intu
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\BulkSyncCommand.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\BulkWipeCommand.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\ConsoleProgressBar.java
+C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\GuiCommand.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\ResolveProgressBar.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\RootCommand.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\cli\ShellCommand.java
@@ -28,4 +29,5 @@ C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intu
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\graph\RawAccessTokenProvider.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\graph\TokenProvider.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\graph\TokenProviderFactory.java
+C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\gui\IntuneBulkGuiApp.java
 C:\Users\mkylm\Documents\Cursor\intune-bulk-actions\src\main\java\com\mkylm\intunebulk\Main.java
