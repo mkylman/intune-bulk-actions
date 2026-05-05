@@ -21,8 +21,11 @@ import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -291,10 +294,10 @@ public final class IntuneBulkGuiApp {
     commands.setText(
         String.join(
             System.lineSeparator(),
-            ".\\mvnw.cmd -q package",
-            "java -jar target/intune-bulk-actions-0.1.0.jar shell",
-            "java -jar target/intune-bulk-actions-0.1.0.jar bulk sync --groupId <GUID> --dryRun",
-            "java -jar target/intune-bulk-actions-0.1.0.jar gui"));
+            ".\\dist\\intune-bulk-actions\\intune-bulk-actions.exe",
+            ".\\dist\\intune-bulk-actions\\intune-bulk-actions.exe shell",
+            ".\\dist\\intune-bulk-actions\\intune-bulk-actions.exe bulk sync --groupId <GUID> --dryRun",
+            ".\\dist\\intune-bulk-actions\\intune-bulk-actions.exe gui"));
 
     JScrollPane commandsScroll = new JScrollPane(commands);
     commandsScroll.setBorder(BorderFactory.createTitledBorder("Quick Start Commands"));
@@ -591,7 +594,7 @@ public final class IntuneBulkGuiApp {
       @Override
       protected List<ActionResult> doInBackground() {
         List<com.mkylm.intunebulk.core.DeviceRef> targets =
-            runtime.groupResolver().resolveFromAadGroup(selected.id());
+            runtime.resolveGroupDevices(selected.id());
         ActionOptions options =
             ActionOptions.builder()
                 .dryRun(false)
@@ -732,7 +735,7 @@ public final class IntuneBulkGuiApp {
         "Resolving group devices for " + selected.name() + "...",
         new String[] {"Device Name", "Serial Number", "Device Primary User"},
         () -> {
-          List<DeviceRef> devices = runtime.groupResolver().resolveFromAadGroup(selected.id());
+          List<DeviceRef> devices = runtime.resolveGroupDevices(selected.id());
           List<String[]> rows = new ArrayList<>();
           for (DeviceRef device : devices) {
             if (device.skipped()) {
@@ -870,11 +873,14 @@ public final class IntuneBulkGuiApp {
   }
 
   private static final class GuiRuntime {
+    private static final Duration GROUP_DEVICE_CACHE_TTL = Duration.ofMinutes(5);
+
     private GraphClient graph;
     private GroupDeviceResolver groupResolver;
     private DeviceActionService actionService;
     private JTable resultsTable;
     private DefaultTableModel resultsModel;
+    private final Map<String, CachedGroupDevices> groupDevicesCache = new HashMap<>();
 
     private GraphClient graph() {
       if (graph == null) {
@@ -897,6 +903,18 @@ public final class IntuneBulkGuiApp {
       }
       return actionService;
     }
+
+    private List<DeviceRef> resolveGroupDevices(String groupId) {
+      Instant now = Instant.now();
+      CachedGroupDevices cached = groupDevicesCache.get(groupId);
+      if (cached != null && now.isBefore(cached.expiresAt())) {
+        return cached.devices();
+      }
+
+      List<DeviceRef> resolved = List.copyOf(groupResolver().resolveFromAadGroup(groupId));
+      groupDevicesCache.put(groupId, new CachedGroupDevices(resolved, now.plus(GROUP_DEVICE_CACHE_TTL)));
+      return resolved;
+    }
   }
 
   private record GroupOption(String name, String id) {
@@ -905,6 +923,8 @@ public final class IntuneBulkGuiApp {
       return name;
     }
   }
+
+  private record CachedGroupDevices(List<DeviceRef> devices, Instant expiresAt) {}
 
   private IntuneBulkGuiApp() {}
 }
