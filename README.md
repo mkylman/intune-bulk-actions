@@ -1,18 +1,40 @@
-# intune-bulk-actions (CLI scaffold)
+# intune-bulk-actions
 
-CLI-first Java scaffold for performing bulk actions on Intune-enrolled devices via Microsoft Graph.
+Java tool for performing bulk actions on Intune-enrolled devices via Microsoft Graph, with both CLI and desktop GUI workflows.
 
 ## What’s included
-- CLI skeleton (Picocli): `bulk sync|reboot|wipe|autopilot-reset`
+- CLI (Picocli): `bulk sync|reboot|wipe|autopilot-reset|remove-primary-user`
 - Targeting by Azure AD Group (real Graph calls)
 - Reusable core layer (`DeviceActionService`, `GroupDeviceResolver`)
 - Graph abstraction (`GraphClient`) + token provider abstraction (`TokenProvider`)
 - Throttling-aware retry framework
-- Interactive terminal shell: `shell` (browse groups/users/devices, resolve group members)
+- Interactive terminal shell: `shell` (browse groups/users/devices, resolve group members, run group actions)
+- Desktop GUI mode: `gui` (queries, group device resolution, and group actions)
+
+## Recent updates
+- Default no-args startup now launches GUI mode (instead of shell).
+- GUI group actions now include:
+  - `Group Devices`
+  - `Sync Group`
+  - `Reboot Group`
+  - `Remove Primary User Group`
+- Group device resolution is now faster due to parallel managed-device lookup in `GroupDeviceResolver`.
+- GUI reuses resolved group devices with a short in-session cache for repeated actions.
+- GUI Quick Start commands now reference packaged `.exe` usage.
 
 ## Build
 ```bash
 .\mvnw.cmd -q package
+```
+
+## Build Windows app image (`.exe`)
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build-appimage.ps1
+```
+
+Expected launcher:
+```text
+.\dist\intune-bulk-actions\intune-bulk-actions.exe
 ```
 
 ## Run
@@ -22,6 +44,14 @@ java -jar target/intune-bulk-actions-0.1.0.jar shell
 java -jar target/intune-bulk-actions-0.1.0.jar gui
 java -jar target/intune-bulk-actions-0.1.0.jar --gui
 java -jar target/intune-bulk-actions-0.1.0.jar bulk sync --groupId <GUID> --dryRun
+```
+
+Packaged app-image examples:
+```powershell
+.\dist\intune-bulk-actions\intune-bulk-actions.exe
+.\dist\intune-bulk-actions\intune-bulk-actions.exe shell
+.\dist\intune-bulk-actions\intune-bulk-actions.exe gui
+.\dist\intune-bulk-actions\intune-bulk-actions.exe bulk sync --groupId <GUID> --dryRun
 ```
 
 ## Auth
@@ -67,7 +97,16 @@ Inside `shell`:
 - `groups [--top N] [--prefix TEXT]`
 - `users [--top N] [--prefix TEXT]`
 - `devices [--top N] [--prefix TEXT]`
-- `group-devices <groupId>`
+- `group-devices <groupId|groupName>`
+- `sync-group <groupId|groupName> [--dryRun]`
+- `reboot-group <groupId|groupName> [--dryRun]`
+- `remove-primary-user-group <groupId|groupName> [--dryRun]`
+
+## GUI actions
+Inside `gui`:
+- Query buttons: `Groups`, `Users`, `Devices`
+- Group selector actions: `Group Devices`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`
+- Actions execute against all resolvable managed devices in the selected group (with confirmation prompts for mutating operations).
 
 ## Architecture
 - End-to-end runtime flow (with file and line references): `docs/ARCHITECTURE_FLOW.md`
