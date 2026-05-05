@@ -6,6 +6,7 @@ import com.mkylm.intunebulk.core.ActionRequest;
 import com.mkylm.intunebulk.core.ActionResult;
 import com.mkylm.intunebulk.core.ActionState;
 import com.mkylm.intunebulk.core.ActionType;
+import com.mkylm.intunebulk.core.DeviceRef;
 import com.mkylm.intunebulk.core.DeviceActionService;
 import com.mkylm.intunebulk.core.GroupDeviceResolver;
 import com.mkylm.intunebulk.graph.GraphClient;
@@ -127,6 +128,7 @@ public final class IntuneBulkGuiApp {
     JButton groupsButton = new JButton("Groups");
     JButton usersButton = new JButton("Users");
     JButton devicesButton = new JButton("Devices");
+    JButton groupDevicesButton = new JButton("Group Devices");
     JButton syncGroupButton = new JButton("Sync Group");
     JButton rebootGroupButton = new JButton("Reboot Group");
     JComboBox<GroupOption> groupDropdown = new JComboBox<>();
@@ -142,6 +144,7 @@ public final class IntuneBulkGuiApp {
                 groupsButton,
                 usersButton,
                 devicesButton,
+                groupDevicesButton,
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
@@ -153,6 +156,7 @@ public final class IntuneBulkGuiApp {
                 groupsButton,
                 usersButton,
                 devicesButton,
+                groupDevicesButton,
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
@@ -164,6 +168,19 @@ public final class IntuneBulkGuiApp {
                 groupsButton,
                 usersButton,
                 devicesButton,
+                groupDevicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
+    groupDevicesButton.addActionListener(
+        event ->
+            runGroupDevices(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                groupDevicesButton,
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
@@ -175,6 +192,7 @@ public final class IntuneBulkGuiApp {
                 groupsButton,
                 usersButton,
                 devicesButton,
+                groupDevicesButton,
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
@@ -186,6 +204,7 @@ public final class IntuneBulkGuiApp {
                 groupsButton,
                 usersButton,
                 devicesButton,
+                groupDevicesButton,
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
@@ -197,6 +216,7 @@ public final class IntuneBulkGuiApp {
     JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     actionRow.add(new JLabel("Group:"));
     actionRow.add(groupDropdown);
+    actionRow.add(groupDevicesButton);
     actionRow.add(syncGroupButton);
     actionRow.add(rebootGroupButton);
 
@@ -212,6 +232,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown);
@@ -299,6 +320,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -308,6 +330,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -332,6 +355,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -341,6 +365,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -366,6 +391,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -375,6 +401,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -401,6 +428,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -408,6 +436,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -442,6 +471,7 @@ public final class IntuneBulkGuiApp {
               groupsButton,
               usersButton,
               devicesButton,
+              groupDevicesButton,
               syncGroupButton,
               rebootGroupButton,
               groupDropdown,
@@ -472,6 +502,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -481,6 +512,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -495,6 +527,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
@@ -504,6 +537,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -518,6 +552,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown,
@@ -545,6 +580,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -598,6 +634,7 @@ public final class IntuneBulkGuiApp {
               groupsButton,
               usersButton,
               devicesButton,
+              groupDevicesButton,
               syncGroupButton,
               rebootGroupButton,
               groupDropdown,
@@ -613,6 +650,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown,
@@ -624,6 +662,7 @@ public final class IntuneBulkGuiApp {
         groupsButton,
         usersButton,
         devicesButton,
+        groupDevicesButton,
         syncGroupButton,
         rebootGroupButton,
         groupDropdown,
@@ -654,6 +693,7 @@ public final class IntuneBulkGuiApp {
               groupsButton,
               usersButton,
               devicesButton,
+              groupDevicesButton,
               syncGroupButton,
               rebootGroupButton,
               groupDropdown,
@@ -661,6 +701,53 @@ public final class IntuneBulkGuiApp {
         }
       }
     }.execute();
+  }
+
+  private static void runGroupDevices(
+      GuiRuntime runtime,
+      JLabel statusLabel,
+      JButton groupsButton,
+      JButton usersButton,
+      JButton devicesButton,
+      JButton groupDevicesButton,
+      JButton syncGroupButton,
+      JButton rebootGroupButton,
+      JComboBox<GroupOption> groupDropdown) {
+    GroupOption selected = (GroupOption) groupDropdown.getSelectedItem();
+    if (selected == null) {
+      JOptionPane.showMessageDialog(null, "Select a group first.", "No Group Selected", JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    runQuery(
+        runtime,
+        statusLabel,
+        groupsButton,
+        usersButton,
+        devicesButton,
+        groupDevicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        "Resolving group devices for " + selected.name() + "...",
+        new String[] {"Device Name", "Serial Number", "Device Primary User"},
+        () -> {
+          List<DeviceRef> devices = runtime.groupResolver().resolveFromAadGroup(selected.id());
+          List<String[]> rows = new ArrayList<>();
+          for (DeviceRef device : devices) {
+            if (device.skipped()) {
+              rows.add(new String[] {device.displayNameOrId(), "-", "-"});
+            } else {
+              rows.add(
+                  new String[] {
+                    device.displayNameOrId(), device.serialNumber(), device.primaryUser()
+                  });
+            }
+          }
+          sortRowsByColumn(rows, 0);
+          return rows;
+        },
+        "Loaded devices for group " + selected.name() + ".");
   }
 
   private static void setResults(GuiRuntime runtime, String[] columns, List<String[]> rows) {
@@ -697,6 +784,7 @@ public final class IntuneBulkGuiApp {
       JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
+      JButton groupDevicesButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown,
@@ -704,6 +792,7 @@ public final class IntuneBulkGuiApp {
     groupsButton.setEnabled(enabled);
     usersButton.setEnabled(enabled);
     devicesButton.setEnabled(enabled);
+    groupDevicesButton.setEnabled(enabled);
     syncGroupButton.setEnabled(enabled);
     rebootGroupButton.setEnabled(enabled);
     groupDropdown.setEnabled(enabled);
