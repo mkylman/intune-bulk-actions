@@ -3,3 +3,10 @@ out/
 target/
 out-mini/
 README copy.md
+src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java
+target/classes/com/mkylm/intunebulk/cli/ShellCommand.class
+target/classes/com/mkylm/intunebulk/graph/TokenProviderFactory.class
+target/classes/com/mkylm/intunebulk/Main.class
+target/intune-bulk-actions-0.1.0.jar
+target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst
+target/original-intune-bulk-actions-0.1.0.jar
