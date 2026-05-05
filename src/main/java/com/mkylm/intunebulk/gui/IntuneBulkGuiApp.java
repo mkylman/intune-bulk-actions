@@ -134,6 +134,7 @@ public final class IntuneBulkGuiApp {
     JButton groupDevicesButton = new JButton("Group Devices");
     JButton syncGroupButton = new JButton("Sync Group");
     JButton rebootGroupButton = new JButton("Reboot Group");
+    JButton removePrimaryUserGroupButton = new JButton("Remove Primary User Group");
     JComboBox<GroupOption> groupDropdown = new JComboBox<>();
     groupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
     groupDropdown.setEnabled(false);
@@ -211,21 +212,37 @@ public final class IntuneBulkGuiApp {
                 syncGroupButton,
                 rebootGroupButton,
                 groupDropdown));
+    removePrimaryUserGroupButton.addActionListener(
+        event ->
+            runRemovePrimaryUserGroup(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                groupDevicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
 
     queryButtonsRow.add(groupsButton);
     queryButtonsRow.add(usersButton);
     queryButtonsRow.add(devicesButton);
 
-    JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    actionRow.add(new JLabel("Group:"));
-    actionRow.add(groupDropdown);
-    actionRow.add(groupDevicesButton);
-    actionRow.add(syncGroupButton);
-    actionRow.add(rebootGroupButton);
+    JPanel groupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    groupSelectionRow.add(new JLabel("Group:"));
+    groupSelectionRow.add(groupDropdown);
+    groupSelectionRow.add(groupDevicesButton);
 
-    JPanel rows = new JPanel(new GridLayout(2, 1, 0, 4));
+    JPanel groupActionsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    groupActionsRow.add(syncGroupButton);
+    groupActionsRow.add(rebootGroupButton);
+    groupActionsRow.add(removePrimaryUserGroupButton);
+
+    JPanel rows = new JPanel(new GridLayout(3, 1, 0, 4));
     rows.add(queryButtonsRow);
-    rows.add(actionRow);
+    rows.add(groupSelectionRow);
+    rows.add(groupActionsRow);
     panel.add(rows, BorderLayout.CENTER);
     panel.add(statusLabel, BorderLayout.SOUTH);
 
@@ -547,6 +564,31 @@ public final class IntuneBulkGuiApp {
         ActionType.REBOOT,
         "Reboot Group",
         "REBOOT");
+  }
+
+  private static void runRemovePrimaryUserGroup(
+      GuiRuntime runtime,
+      JLabel statusLabel,
+      JButton groupsButton,
+      JButton usersButton,
+      JButton devicesButton,
+      JButton groupDevicesButton,
+      JButton syncGroupButton,
+      JButton rebootGroupButton,
+      JComboBox<GroupOption> groupDropdown) {
+    runGroupAction(
+        runtime,
+        statusLabel,
+        groupsButton,
+        usersButton,
+        devicesButton,
+        groupDevicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        ActionType.REMOVE_PRIMARY_USER,
+        "Remove Primary User Group",
+        "REMOVE_PRIMARY_USER");
   }
 
   private static void runGroupAction(
