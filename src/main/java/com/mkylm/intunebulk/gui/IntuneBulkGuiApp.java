@@ -17,6 +17,7 @@ import java.awt.Frame;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.datatransfer.StringSelection;
 import java.util.ArrayList;
@@ -44,7 +45,7 @@ import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.table.DefaultTableModel;
 
-/** Phase-1 desktop GUI shell to complement the existing CLI workflow. */
+/** Desktop GUI shell to complement the existing CLI workflow. */
 public final class IntuneBulkGuiApp {
   public static void launch() {
     System.out.println("[GUI] Launch requested.");
@@ -97,22 +98,6 @@ public final class IntuneBulkGuiApp {
     frame.setLocationRelativeTo(null);
     frame.setLayout(new BorderLayout(10, 10));
 
-    JPanel top = new JPanel(new BorderLayout());
-    top.setBorder(BorderFactory.createEmptyBorder(12, 12, 0, 12));
-    JLabel title = new JLabel("Intune Bulk Actions - GUI (Phase 1)");
-    title.setFont(title.getFont().deriveFont(Font.BOLD, 18f));
-    top.add(title, BorderLayout.NORTH);
-
-    JTextArea intro = new JTextArea();
-    intro.setEditable(false);
-    intro.setLineWrap(true);
-    intro.setWrapStyleWord(true);
-    intro.setOpaque(false);
-    intro.setText(
-        "CLI remains fully supported. These buttons run live Graph reads using your existing auth config.");
-    top.add(intro, BorderLayout.CENTER);
-    frame.add(top, BorderLayout.NORTH);
-
     GuiRuntime runtime = new GuiRuntime();
 
     JPanel centerPanel = new JPanel(new BorderLayout(10, 10));
@@ -138,39 +123,98 @@ public final class IntuneBulkGuiApp {
     JPanel panel = new JPanel(new BorderLayout());
     panel.setBorder(BorderFactory.createTitledBorder("Run Queries and Actions"));
 
-    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    JPanel queryButtonsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     JButton groupsButton = new JButton("Groups");
     JButton usersButton = new JButton("Users");
     JButton devicesButton = new JButton("Devices");
     JButton syncGroupButton = new JButton("Sync Group");
+    JButton rebootGroupButton = new JButton("Reboot Group");
     JComboBox<GroupOption> groupDropdown = new JComboBox<>();
     groupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
     groupDropdown.setEnabled(false);
     JLabel statusLabel = new JLabel("Ready.");
 
     groupsButton.addActionListener(
-        event -> runGroups(runtime, statusLabel, groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown));
+        event ->
+            runGroups(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
     usersButton.addActionListener(
-        event -> runUsers(runtime, statusLabel, groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown));
+        event ->
+            runUsers(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
     devicesButton.addActionListener(
-        event -> runDevices(runtime, statusLabel, groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown));
+        event ->
+            runDevices(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
     syncGroupButton.addActionListener(
-        event -> runSyncGroup(runtime, statusLabel, groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown));
+        event ->
+            runSyncGroup(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
+    rebootGroupButton.addActionListener(
+        event ->
+            runRebootGroup(
+                runtime,
+                statusLabel,
+                groupsButton,
+                usersButton,
+                devicesButton,
+                syncGroupButton,
+                rebootGroupButton,
+                groupDropdown));
 
-    buttons.add(groupsButton);
-    buttons.add(usersButton);
-    buttons.add(devicesButton);
-    buttons.add(syncGroupButton);
-    panel.add(buttons, BorderLayout.WEST);
+    queryButtonsRow.add(groupsButton);
+    queryButtonsRow.add(usersButton);
+    queryButtonsRow.add(devicesButton);
 
-    JPanel selectorPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    selectorPanel.add(new JLabel("Group:"));
-    selectorPanel.add(groupDropdown);
-    panel.add(selectorPanel, BorderLayout.CENTER);
+    JPanel actionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    actionRow.add(new JLabel("Group:"));
+    actionRow.add(groupDropdown);
+    actionRow.add(syncGroupButton);
+    actionRow.add(rebootGroupButton);
+
+    JPanel rows = new JPanel(new GridLayout(2, 1, 0, 4));
+    rows.add(queryButtonsRow);
+    rows.add(actionRow);
+    panel.add(rows, BorderLayout.CENTER);
     panel.add(statusLabel, BorderLayout.SOUTH);
 
     loadGroupsIntoDropdown(
-        runtime, statusLabel, groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown);
+        runtime,
+        statusLabel,
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown);
     return panel;
   }
 
@@ -256,6 +300,7 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
     runQuery(
         runtime,
@@ -264,6 +309,7 @@ public final class IntuneBulkGuiApp {
         usersButton,
         devicesButton,
         syncGroupButton,
+        rebootGroupButton,
         groupDropdown,
         "Loading groups...",
         new String[] {"Display Name", "Group ID"},
@@ -287,6 +333,7 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
     runQuery(
         runtime,
@@ -295,6 +342,7 @@ public final class IntuneBulkGuiApp {
         usersButton,
         devicesButton,
         syncGroupButton,
+        rebootGroupButton,
         groupDropdown,
         "Loading users...",
         new String[] {"Display Name", "UPN", "User ID"},
@@ -319,6 +367,7 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
     runQuery(
         runtime,
@@ -327,6 +376,7 @@ public final class IntuneBulkGuiApp {
         usersButton,
         devicesButton,
         syncGroupButton,
+        rebootGroupButton,
         groupDropdown,
         "Loading devices...",
         new String[] {"Device Name", "Serial", "Managed Device ID"},
@@ -352,9 +402,16 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
     setActionControlsEnabled(
-        groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, false);
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        false);
     statusLabel.setText("Loading group names...");
 
     new SwingWorker<List<GroupOption>, Void>() {
@@ -382,7 +439,13 @@ public final class IntuneBulkGuiApp {
               JOptionPane.ERROR_MESSAGE);
         } finally {
           setActionControlsEnabled(
-              groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, true);
+              groupsButton,
+              usersButton,
+              devicesButton,
+              syncGroupButton,
+              rebootGroupButton,
+              groupDropdown,
+              true);
         }
       }
     }.execute();
@@ -410,7 +473,57 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown) {
+    runGroupAction(
+        runtime,
+        statusLabel,
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        ActionType.SYNC,
+        "Sync Group",
+        "SYNC");
+  }
+
+  private static void runRebootGroup(
+      GuiRuntime runtime,
+      JLabel statusLabel,
+      JButton groupsButton,
+      JButton usersButton,
+      JButton devicesButton,
+      JButton syncGroupButton,
+      JButton rebootGroupButton,
+      JComboBox<GroupOption> groupDropdown) {
+    runGroupAction(
+        runtime,
+        statusLabel,
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        ActionType.REBOOT,
+        "Reboot Group",
+        "REBOOT");
+  }
+
+  private static void runGroupAction(
+      GuiRuntime runtime,
+      JLabel statusLabel,
+      JButton groupsButton,
+      JButton usersButton,
+      JButton devicesButton,
+      JButton syncGroupButton,
+      JButton rebootGroupButton,
+      JComboBox<GroupOption> groupDropdown,
+      ActionType actionType,
+      String actionTitle,
+      String actionLabel) {
     GroupOption selected = (GroupOption) groupDropdown.getSelectedItem();
     if (selected == null) {
       JOptionPane.showMessageDialog(null, "Select a group first.", "No Group Selected", JOptionPane.WARNING_MESSAGE);
@@ -420,8 +533,8 @@ public final class IntuneBulkGuiApp {
     int choice =
         JOptionPane.showConfirmDialog(
             null,
-            "Run SYNC on all resolvable devices in group:\n" + selected.name() + "?",
-            "Confirm Sync Group",
+            "Run " + actionLabel + " on all resolvable devices in group:\n" + selected.name() + "?",
+            "Confirm " + actionTitle,
             JOptionPane.YES_NO_OPTION,
             JOptionPane.WARNING_MESSAGE);
     if (choice != JOptionPane.YES_OPTION) {
@@ -429,7 +542,13 @@ public final class IntuneBulkGuiApp {
     }
 
     setActionControlsEnabled(
-        groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, false);
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        false);
     statusLabel.setText("Resolving devices for " + selected.name() + "...");
 
     new SwingWorker<List<ActionResult>, Void>() {
@@ -445,7 +564,7 @@ public final class IntuneBulkGuiApp {
                 .baseBackoff(java.time.Duration.ofSeconds(2))
                 .continueOnError(true)
                 .build();
-        ActionRequest request = new ActionRequest(ActionType.SYNC, targets, options);
+        ActionRequest request = new ActionRequest(actionType, targets, options);
         return runtime.actionService().execute(request);
       }
 
@@ -458,7 +577,8 @@ public final class IntuneBulkGuiApp {
           long failed = results.stream().filter(r -> r.state() == ActionState.FAILED).count();
           long skipped = results.stream().filter(r -> r.state() == ActionState.SKIPPED).count();
           statusLabel.setText(
-              "SYNC complete for "
+              actionLabel
+                  + " complete for "
                   + selected.name()
                   + ". ok:"
                   + succeeded
@@ -467,15 +587,21 @@ public final class IntuneBulkGuiApp {
                   + " skip:"
                   + skipped);
         } catch (Exception ex) {
-          statusLabel.setText("SYNC failed.");
+          statusLabel.setText(actionLabel + " failed.");
           JOptionPane.showMessageDialog(
               null,
-              "Sync-group failed: " + ex.getMessage(),
-              "Sync Error",
+              actionTitle + " failed: " + ex.getMessage(),
+              actionTitle + " Error",
               JOptionPane.ERROR_MESSAGE);
         } finally {
           setActionControlsEnabled(
-              groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, true);
+              groupsButton,
+              usersButton,
+              devicesButton,
+              syncGroupButton,
+              rebootGroupButton,
+              groupDropdown,
+              true);
         }
       }
     }.execute();
@@ -488,13 +614,20 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown,
       String loadingMessage,
       String[] columns,
       QueryRunner queryRunner,
       String donePrefix) {
     setActionControlsEnabled(
-        groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, false);
+        groupsButton,
+        usersButton,
+        devicesButton,
+        syncGroupButton,
+        rebootGroupButton,
+        groupDropdown,
+        false);
     statusLabel.setText(loadingMessage);
 
     new SwingWorker<List<String[]>, Void>() {
@@ -518,7 +651,13 @@ public final class IntuneBulkGuiApp {
               JOptionPane.ERROR_MESSAGE);
         } finally {
           setActionControlsEnabled(
-              groupsButton, usersButton, devicesButton, syncGroupButton, groupDropdown, true);
+              groupsButton,
+              usersButton,
+              devicesButton,
+              syncGroupButton,
+              rebootGroupButton,
+              groupDropdown,
+              true);
         }
       }
     }.execute();
@@ -559,12 +698,14 @@ public final class IntuneBulkGuiApp {
       JButton usersButton,
       JButton devicesButton,
       JButton syncGroupButton,
+      JButton rebootGroupButton,
       JComboBox<GroupOption> groupDropdown,
       boolean enabled) {
     groupsButton.setEnabled(enabled);
     usersButton.setEnabled(enabled);
     devicesButton.setEnabled(enabled);
     syncGroupButton.setEnabled(enabled);
+    rebootGroupButton.setEnabled(enabled);
     groupDropdown.setEnabled(enabled);
   }
 

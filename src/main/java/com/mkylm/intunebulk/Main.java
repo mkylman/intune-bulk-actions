@@ -7,10 +7,10 @@ import picocli.CommandLine;
 public final class Main {
   public static void main(String[] args) {
     // RootCommand owns all subcommands (bulk + interactive shell).
-    // Quality-of-life default for packaged .exe: opening it directly starts the REPL shell.
+    // Quality-of-life default for packaged .exe: opening it directly starts the GUI.
     String[] effectiveArgs;
     if (args == null || args.length == 0) {
-      effectiveArgs = new String[] {"shell"};
+      effectiveArgs = new String[] {"gui"};
     } else if (args.length == 1 && "--gui".equalsIgnoreCase(args[0])) {
       effectiveArgs = new String[] {"gui"};
     } else {
