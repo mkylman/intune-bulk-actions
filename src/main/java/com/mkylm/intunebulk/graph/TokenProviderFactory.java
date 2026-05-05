@@ -24,7 +24,7 @@ import java.util.Set;
 public final class TokenProviderFactory {
   public static TokenProvider fromEnvironment() {
     // Entry point for auth selection used by all commands.
-    // Default is device code flow for minimal setup friction.
+    // Default is interactive browser flow.
     String mode = Env.optional("INTUNE_AUTH_MODE", "interactive").toLowerCase(Locale.ROOT);
     return switch (mode) {
       case "raw_token" -> new RawAccessTokenProvider(Env.required("INTUNE_ACCESS_TOKEN"));

@@ -117,7 +117,7 @@ public final class ShellCommand implements Runnable {
     authRows.add(
         new String[] {
           "Default",
-          "INTUNE_AUTH_MODE=device_code (prints a code to enter in browser)"
+          "INTUNE_AUTH_MODE=interactive (opens browser sign-in when token is needed)"
         });
     authRows.add(
         new String[] {

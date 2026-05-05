@@ -1,5 +1,6 @@
-dist/intune-bulk-actions/ibt.cfg
-dist/*
-out/*
-out-mini/*
+/dist
+/out
+/out-mini
 README copy.md
+/target
+/dist-new
