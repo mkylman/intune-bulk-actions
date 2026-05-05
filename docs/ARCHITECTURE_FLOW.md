@@ -2,135 +2,127 @@
 
 This document describes the runtime flow of `intune-bulk-actions` from process start through Graph calls and final output.
 
-## End-to-End Runtime Timeline (Default `.exe` launch -> `sync-group`)
+## End-to-End Runtime Timeline (Default `.exe` launch -> GUI group action)
 
 1. Program entrypoint
    - File: `src/main/java/com/mkylm/intunebulk/Main.java`
-   - Lines: `8-13`
    - Behavior:
-     - Starts Picocli with `RootCommand`
-     - If no arguments are passed, defaults to `shell`
+     - Starts Picocli with `RootCommand`.
+     - If no arguments are passed, defaults to `gui` (quality-of-life behavior for packaged app launch).
+     - `--gui` is also normalized to the `gui` command.
 
 2. Top-level command routing
    - File: `src/main/java/com/mkylm/intunebulk/cli/RootCommand.java`
-   - Lines: `6-10`
    - Behavior:
-     - Registers `bulk` and `shell` commands
+     - Registers `bulk`, `shell`, and `gui` subcommands.
 
-3. Shell service bootstrap
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-   - Lines: `31-37`
+3. GUI command handoff
+   - File: `src/main/java/com/mkylm/intunebulk/cli/GuiCommand.java`
    - Behavior:
-     - Builds `TokenProvider`, `GraphClient`, `GroupDeviceResolver`, `DeviceActionService`
+     - Delegates to `IntuneBulkGuiApp.launch()`.
 
-4. Shell REPL loop and dispatch
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-   - Lines: `43-79`
+4. GUI bootstrap and window assembly
+   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
    - Behavior:
-     - Reads user input and dispatches commands (`groups`, `group-devices`, `sync-group`, etc.)
+     - Creates runtime services lazily (`GraphClient`, `GroupDeviceResolver`, `DeviceActionService`).
+     - Builds query controls and group action controls.
+     - Loads group names into the dropdown asynchronously.
 
-5. `sync-group` command pipeline
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-   - Lines: `229-257`
+5. GUI query/actions available
+   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
    - Behavior:
-     - Parses CLI flags
-     - Resolves group ID
-     - Resolves devices
-     - Executes action
-     - Prints summary
+     - Query buttons: `Groups`, `Users`, `Devices`.
+     - Group-scoped controls: `Group Devices`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`.
+     - Mutating operations show confirmation dialogs before execution.
 
-6. Group name-to-ID resolution
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-   - Lines: `330-384`
-   - Behavior:
-     - Accepts direct GUIDs
-     - Otherwise performs exact/prefix group lookup via Graph
-     - Handles ambiguity and not-found cases
-
-7. Resolve-phase progress bar
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-   - Lines: `324-328`
-   - File: `src/main/java/com/mkylm/intunebulk/cli/ResolveProgressBar.java`
-   - Lines: `16-44`
-   - Behavior:
-     - Displays live member-resolution progress (`mapped`, `skipped`)
-
-8. Group membership -> managedDevice mapping
+6. Group device resolution (shared core path)
    - File: `src/main/java/com/mkylm/intunebulk/core/GroupDeviceResolver.java`
-   - Lines: `36-124`
    - Behavior:
-     - Reads transitive group device members
-     - Maps each AAD device to Intune managedDevice
-     - Emits progress snapshots
+     - Reads transitive Entra device membership:
+       - `/groups/{id}/transitiveMembers/microsoft.graph.device`
+     - Resolves each member to Intune managed device using:
+       - `/deviceManagement/managedDevices?$filter=azureADDeviceId eq '{id}'`
+     - Emits progress snapshots (used by shell progress bar; GUI can run async without console progress).
 
-9. Graph reads used for resolution
+7. Resolution performance improvements
    - File: `src/main/java/com/mkylm/intunebulk/core/GroupDeviceResolver.java`
-   - Lines: `42-47`, `72-79`
-   - File: `src/main/java/com/mkylm/intunebulk/graph/GraphClient.java`
-   - Lines: `76-83`, `98-129`, `135-156`
    - Behavior:
-     - Uses paged GET (`@odata.nextLink`) and filtered lookup requests
+     - Managed-device lookups now run with bounded parallelism (thread pool), reducing total latency for larger groups.
 
-10. Action-phase progress bar
-    - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-    - Lines: `318-322`
-    - File: `src/main/java/com/mkylm/intunebulk/cli/ConsoleProgressBar.java`
-    - Lines: `16-41`
-    - Behavior:
-      - Displays action completion progress with success/fail/skip counters
+8. GUI group-device cache
+   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+   - Behavior:
+     - GUI runtime caches resolved group devices by group ID for a short TTL (5 minutes).
+     - Repeated `Group Devices`, `Sync Group`, `Reboot Group`, and `Remove Primary User Group` calls reuse recent results.
 
-11. Concurrent bulk action execution
-    - File: `src/main/java/com/mkylm/intunebulk/core/DeviceActionService.java`
-    - Lines: `44-85`
-    - Behavior:
-      - Executes actions concurrently with completion-order progress updates
+9. Action execution pipeline
+   - Files:
+     - `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+     - `src/main/java/com/mkylm/intunebulk/core/DeviceActionService.java`
+   - Behavior:
+     - Builds `ActionRequest` (`SYNC`, `REBOOT`, `REMOVE_PRIMARY_USER`, etc.).
+     - Executes device actions concurrently with retry/backoff behavior.
+     - Updates result table with per-device outcomes and aggregate counts.
 
-12. Per-device action execution and retry
-    - File: `src/main/java/com/mkylm/intunebulk/core/DeviceActionService.java`
-    - Lines: `95-125`
-    - File: `src/main/java/com/mkylm/intunebulk/core/RetryPolicy.java`
-    - Lines: `23-40`
-    - Behavior:
-      - Runs each device operation with transient retry and backoff
-
-13. Action-to-endpoint mapping
-    - File: `src/main/java/com/mkylm/intunebulk/core/DeviceActionService.java`
-    - Lines: `127-151`
-    - Behavior:
-      - Maps `ActionType` values to specific Graph action endpoints (`syncDevice`, `rebootNow`, `wipe`, `autopilotReset`, remove primary user)
-
-14. Graph writes (POST/DELETE)
+10. Graph transport layer
     - File: `src/main/java/com/mkylm/intunebulk/graph/GraphClient.java`
-    - Lines: `191-230`, `232-261`
     - Behavior:
-      - Sends authenticated write requests
-      - Classifies transient vs permanent failures
+      - Handles authenticated GET/POST/DELETE requests.
+      - Supports OData pagination (`@odata.nextLink`).
+      - Classifies transient (429/5xx) vs permanent failures.
 
-15. Final action summary rendering
-    - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
-    - Lines: `533-555`
-    - Behavior:
-      - Prints aggregate totals and per-device outcome table
+## Shell Runtime Timeline (`shell` -> `sync-group` / `reboot-group` / `remove-primary-user-group`)
+
+1. Shell service bootstrap
+   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
+   - Behavior:
+     - Builds `TokenProvider`, `GraphClient`, `GroupDeviceResolver`, and `DeviceActionService`.
+
+2. REPL loop and dispatch
+   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
+   - Behavior:
+     - Reads user input and dispatches commands:
+       - `groups`, `users`, `devices`
+       - `group-devices`
+       - `sync-group`
+       - `reboot-group`
+       - `remove-primary-user-group`
+
+3. Group name-to-ID resolution
+   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
+   - Behavior:
+     - Accepts direct GUIDs.
+     - Resolves exact/prefix group names through Graph.
+     - Returns helpful ambiguity/not-found messages.
+
+4. Resolve + execute progress
+   - Files:
+     - `src/main/java/com/mkylm/intunebulk/cli/ResolveProgressBar.java`
+     - `src/main/java/com/mkylm/intunebulk/cli/ConsoleProgressBar.java`
+   - Behavior:
+     - Shows resolve-phase progress (`mapped`, `skipped`) and action-phase progress (`succeeded`, `failed`, `skipped`).
+
+5. Final summary rendering
+   - File: `src/main/java/com/mkylm/intunebulk/cli/ShellCommand.java`
+   - Behavior:
+     - Prints aggregate totals and per-device results table.
 
 ## Authentication and Config Resolution Timeline
 
 1. Auth mode selection
    - File: `src/main/java/com/mkylm/intunebulk/graph/TokenProviderFactory.java`
-   - Lines: `25-37`
    - Behavior:
-     - Chooses provider from `INTUNE_AUTH_MODE` (`interactive`, `device_code`, `raw_token`)
+     - Chooses provider from `INTUNE_AUTH_MODE` (`interactive`, `device_code`, `raw_token`).
 
 2. Tenant/client/scopes lookup
-   - File: `src/main/java/com/mkylm/intunebulk/graph/TokenProviderFactory.java`
-   - Lines: `41-48`, `65-67`, `86-95`
-   - File: `src/main/java/com/mkylm/intunebulk/graph/Env.java`
-   - Lines: `44-54`
+   - Files:
+     - `src/main/java/com/mkylm/intunebulk/graph/TokenProviderFactory.java`
+     - `src/main/java/com/mkylm/intunebulk/graph/Env.java`
    - Behavior:
-     - Reads values from env first, then `ibt.cfg`
+     - Reads settings from environment first, then `ibt.cfg`.
 
 3. `ibt.cfg` discovery
    - File: `src/main/java/com/mkylm/intunebulk/graph/Env.java`
-   - Lines: `56-120`
    - Behavior:
      - Checks:
        - `INTUNE_CONFIG_FILE` explicit path
@@ -139,27 +131,31 @@ This document describes the runtime flow of `intune-bulk-actions` from process s
        - classpath parent directory (app-image-friendly)
 
 4. Token acquisition behavior
-   - Interactive provider:
-     - File: `src/main/java/com/mkylm/intunebulk/graph/InteractiveBrowserTokenProvider.java`
-     - Lines: `35-58`
-   - Device code provider:
-     - File: `src/main/java/com/mkylm/intunebulk/graph/DeviceCodeTokenProvider.java`
-     - Lines: `40-60`
+   - Files:
+     - `src/main/java/com/mkylm/intunebulk/graph/InteractiveBrowserTokenProvider.java`
+     - `src/main/java/com/mkylm/intunebulk/graph/DeviceCodeTokenProvider.java`
    - Behavior:
-     - Uses in-memory cache, attempts silent acquisition, then falls back to interactive flow
+     - Uses in-memory caching and silent acquisition when possible.
+     - Falls back to interactive/device-code flow as needed.
 
 ## Non-REPL Bulk Path (`intune-bulk bulk ...`)
 
-For one-shot commands, the same core flow runs through:
+For one-shot commands, the same core path runs through:
 
 - File: `src/main/java/com/mkylm/intunebulk/cli/BaseBulkActionCommand.java`
-- Lines: `82-100`
 - Behavior:
-  - Auth setup -> resolve with `RESOLVE` progress -> execute with action progress -> print summary
+  - auth setup -> resolve (`RESOLVE` progress) -> execute (action progress) -> final summary
+
+## Packaging and Launch Notes
+
+- Packaged app-image launcher: `dist/intune-bulk-actions/intune-bulk-actions.exe`
+- Default packaged launch behavior opens GUI mode.
+- Quick-start UX in GUI references `.exe` commands (not `mvnw`).
 
 ## Key Layer Boundaries
 
 - `cli`: command parsing, user interaction, progress bars, output rendering
+- `gui`: desktop UI composition, async workflow orchestration, GUI-only short-lived caching
 - `core`: domain logic (resolve + execute + retry + action/result modeling)
-- `graph`: token acquisition, config/env parsing, HTTP transport, Graph pagination and error handling
+- `graph`: token acquisition, config/env parsing, HTTP transport, Graph pagination/error handling
 
