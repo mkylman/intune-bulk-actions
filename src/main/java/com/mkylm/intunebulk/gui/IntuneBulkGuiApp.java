@@ -12,6 +12,7 @@ import com.mkylm.intunebulk.core.GroupDeviceResolver;
 import com.mkylm.intunebulk.graph.GraphClient;
 import com.mkylm.intunebulk.graph.TokenProvider;
 import com.mkylm.intunebulk.graph.TokenProviderFactory;
+import java.awt.Color;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Frame;
@@ -26,7 +27,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
@@ -44,10 +44,15 @@ import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.RowFilter;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableRowSorter;
 
 /** Desktop GUI shell to complement the existing CLI workflow. */
 public final class IntuneBulkGuiApp {
@@ -111,9 +116,9 @@ public final class IntuneBulkGuiApp {
     JSplitPane split =
         new JSplitPane(
             JSplitPane.VERTICAL_SPLIT,
-            buildStatusTable(),
+            buildSearchPanel(runtime),
             buildResultsPanel(runtime));
-    split.setResizeWeight(0.35);
+    split.setResizeWeight(0.15);
     centerPanel.add(split, BorderLayout.CENTER);
 
     frame.add(centerPanel, BorderLayout.CENTER);
@@ -230,19 +235,29 @@ public final class IntuneBulkGuiApp {
     queryButtonsRow.add(devicesButton);
 
     JPanel groupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    groupSelectionRow.add(new JLabel("Group:"));
     groupSelectionRow.add(groupDropdown);
     groupSelectionRow.add(groupDevicesButton);
 
-    JPanel groupActionsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    groupActionsRow.add(syncGroupButton);
-    groupActionsRow.add(rebootGroupButton);
-    groupActionsRow.add(removePrimaryUserGroupButton);
+    JPanel syncGroupRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    syncGroupRow.add(syncGroupButton);
 
-    JPanel rows = new JPanel(new GridLayout(3, 1, 0, 4));
+    JPanel destructiveActionsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    rebootGroupButton.setBackground(new Color(255, 204, 0));
+    rebootGroupButton.setForeground(Color.BLACK);
+    rebootGroupButton.setOpaque(true);
+    rebootGroupButton.setBorderPainted(false);
+    removePrimaryUserGroupButton.setBackground(new Color(192, 0, 0));
+    removePrimaryUserGroupButton.setForeground(Color.WHITE);
+    removePrimaryUserGroupButton.setOpaque(true);
+    removePrimaryUserGroupButton.setBorderPainted(false);
+    destructiveActionsRow.add(rebootGroupButton);
+    destructiveActionsRow.add(removePrimaryUserGroupButton);
+
+    JPanel rows = new JPanel(new GridLayout(4, 1, 0, 4));
     rows.add(queryButtonsRow);
     rows.add(groupSelectionRow);
-    rows.add(groupActionsRow);
+    rows.add(syncGroupRow);
+    rows.add(destructiveActionsRow);
     panel.add(rows, BorderLayout.CENTER);
     panel.add(statusLabel, BorderLayout.SOUTH);
 
@@ -259,41 +274,51 @@ public final class IntuneBulkGuiApp {
     return panel;
   }
 
-  private static JScrollPane buildStatusTable() {
-    String[] columns = {"Setting", "Value", "Status"};
-    DefaultTableModel model =
-        new DefaultTableModel(columns, 0) {
-          @Override
-          public boolean isCellEditable(int row, int column) {
-            return false;
-          }
-        };
+  private static JPanel buildSearchPanel(GuiRuntime runtime) {
+    JPanel panel = new JPanel(new BorderLayout(8, 8));
+    panel.setBorder(BorderFactory.createTitledBorder("Search Query Results"));
 
-    Map<String, String> checks = new LinkedHashMap<>();
-    checks.put("INTUNE_AUTH_MODE", envOrDefault("INTUNE_AUTH_MODE", "interactive"));
-    checks.put("INTUNE_TENANT_ID", envOrDefault("INTUNE_TENANT_ID", "(default: organizations)"));
-    checks.put("INTUNE_CLIENT_ID", envOrDefault("INTUNE_CLIENT_ID", "(not set)"));
-    checks.put("INTUNE_REDIRECT_URI", envOrDefault("INTUNE_REDIRECT_URI", "(default: http://localhost)"));
-    checks.put("INTUNE_SCOPES", envOrDefault("INTUNE_SCOPES", "(default delegated scopes)"));
+    JLabel searchLabel = new JLabel("Filter:");
+    JTextField searchField = new JTextField();
 
-    for (Map.Entry<String, String> entry : checks.entrySet()) {
-      String value = entry.getValue();
-      String status = value.contains("not set") ? "needs review" : "ok";
-      model.addRow(new Object[] {entry.getKey(), value, status});
-    }
+    JPanel filterRow = new JPanel(new BorderLayout(8, 0));
+    filterRow.add(searchLabel, BorderLayout.WEST);
+    filterRow.add(searchField, BorderLayout.CENTER);
 
-    JTable table = new JTable(model);
-    table.setRowHeight(24);
-    JScrollPane pane = new JScrollPane(table);
-    pane.setBorder(
-        BorderFactory.createTitledBorder("Configuration Snapshot (Environment / Defaults)"));
-    pane.setPreferredSize(new Dimension(860, 300));
-    return pane;
+    panel.add(filterRow, BorderLayout.NORTH);
+    panel.setPreferredSize(new Dimension(860, 80));
+
+    runtime.resultsFilterField = searchField;
+    runtime.applyResultsFilter();
+    searchField
+        .getDocument()
+        .addDocumentListener(
+            new DocumentListener() {
+              @Override
+              public void insertUpdate(DocumentEvent e) {
+                runtime.applyResultsFilter();
+              }
+
+              @Override
+              public void removeUpdate(DocumentEvent e) {
+                runtime.applyResultsFilter();
+              }
+
+              @Override
+              public void changedUpdate(DocumentEvent e) {
+                runtime.applyResultsFilter();
+              }
+            });
+
+    return panel;
   }
 
   private static JScrollPane buildResultsPanel(GuiRuntime runtime) {
     runtime.resultsModel = createModel(new String[] {"Name", "Value 1", "Value 2"});
     runtime.resultsTable = new JTable(runtime.resultsModel);
+    runtime.resultsSorter = new TableRowSorter<>(runtime.resultsModel);
+    runtime.resultsTable.setRowSorter(runtime.resultsSorter);
+    runtime.applyResultsFilter();
     runtime.resultsTable.setRowHeight(24);
     JScrollPane pane = new JScrollPane(runtime.resultsTable);
     pane.setBorder(BorderFactory.createTitledBorder("Query Results"));
@@ -801,6 +826,9 @@ public final class IntuneBulkGuiApp {
       runtime.resultsModel.addRow(row);
     }
     runtime.resultsTable.setModel(runtime.resultsModel);
+    runtime.resultsSorter = new TableRowSorter<>(runtime.resultsModel);
+    runtime.resultsTable.setRowSorter(runtime.resultsSorter);
+    runtime.applyResultsFilter();
   }
 
   private static void setSyncResults(GuiRuntime runtime, List<ActionResult> results) {
@@ -823,6 +851,9 @@ public final class IntuneBulkGuiApp {
           });
     }
     runtime.resultsTable.setModel(runtime.resultsModel);
+    runtime.resultsSorter = new TableRowSorter<>(runtime.resultsModel);
+    runtime.resultsTable.setRowSorter(runtime.resultsSorter);
+    runtime.applyResultsFilter();
   }
 
   private static void setActionControlsEnabled(
@@ -901,14 +932,6 @@ public final class IntuneBulkGuiApp {
     return java.net.URLEncoder.encode(value, java.nio.charset.StandardCharsets.UTF_8);
   }
 
-  private static String envOrDefault(String name, String fallback) {
-    String value = System.getenv(name);
-    if (value == null || value.isBlank()) {
-      return fallback;
-    }
-    return value.trim();
-  }
-
   @FunctionalInterface
   private interface QueryRunner {
     List<String[]> run() throws Exception;
@@ -922,6 +945,8 @@ public final class IntuneBulkGuiApp {
     private DeviceActionService actionService;
     private JTable resultsTable;
     private DefaultTableModel resultsModel;
+    private TableRowSorter<DefaultTableModel> resultsSorter;
+    private JTextField resultsFilterField;
     private final Map<String, CachedGroupDevices> groupDevicesCache = new HashMap<>();
 
     private GraphClient graph() {
@@ -956,6 +981,18 @@ public final class IntuneBulkGuiApp {
       List<DeviceRef> resolved = List.copyOf(groupResolver().resolveFromAadGroup(groupId));
       groupDevicesCache.put(groupId, new CachedGroupDevices(resolved, now.plus(GROUP_DEVICE_CACHE_TTL)));
       return resolved;
+    }
+
+    private void applyResultsFilter() {
+      if (resultsSorter == null) {
+        return;
+      }
+      String query = resultsFilterField == null ? "" : resultsFilterField.getText();
+      if (query == null || query.isBlank()) {
+        resultsSorter.setRowFilter(null);
+        return;
+      }
+      resultsSorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(query.trim())));
     }
   }
 
