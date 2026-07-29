@@ -14,6 +14,7 @@ import com.mkylm.intunebulk.graph.TokenProvider;
 import com.mkylm.intunebulk.graph.TokenProviderFactory;
 import java.awt.Color;
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Frame;
 import java.awt.FlowLayout;
@@ -21,9 +22,17 @@ import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.GridLayout;
 import java.awt.Toolkit;
+import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -36,6 +45,7 @@ import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -51,6 +61,7 @@ import javax.swing.SwingWorker;
 import javax.swing.UIManager;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.table.DefaultTableModel;
 import javax.swing.table.TableRowSorter;
 
@@ -313,7 +324,10 @@ public final class IntuneBulkGuiApp {
     return panel;
   }
 
-  private static JScrollPane buildResultsPanel(GuiRuntime runtime) {
+  private static JPanel buildResultsPanel(GuiRuntime runtime) {
+    JPanel panel = new JPanel(new BorderLayout(0, 8));
+    panel.setBorder(BorderFactory.createTitledBorder("Query Results"));
+
     runtime.resultsModel = createModel(new String[] {"Name", "Value 1", "Value 2"});
     runtime.resultsTable = new JTable(runtime.resultsModel);
     runtime.resultsSorter = new TableRowSorter<>(runtime.resultsModel);
@@ -321,9 +335,111 @@ public final class IntuneBulkGuiApp {
     runtime.applyResultsFilter();
     runtime.resultsTable.setRowHeight(24);
     JScrollPane pane = new JScrollPane(runtime.resultsTable);
-    pane.setBorder(BorderFactory.createTitledBorder("Query Results"));
     pane.setPreferredSize(new Dimension(860, 320));
-    return pane;
+    panel.add(pane, BorderLayout.CENTER);
+
+    JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+    JButton exportButton = new JButton("Export CSV");
+    exportButton.addActionListener(event -> exportResultsToCsv(runtime, exportButton));
+    buttons.add(exportButton);
+    panel.add(buttons, BorderLayout.SOUTH);
+    return panel;
+  }
+
+  private static void exportResultsToCsv(GuiRuntime runtime, Component parent) {
+    DefaultTableModel model = runtime.resultsModel;
+    if (model == null || model.getRowCount() == 0) {
+      JOptionPane.showMessageDialog(
+          parent, "There are no query results to export.", "Export CSV", JOptionPane.INFORMATION_MESSAGE);
+      return;
+    }
+
+    JFileChooser chooser = new JFileChooser();
+    chooser.setDialogTitle("Export Query Results");
+    chooser.setSelectedFile(
+        new File(
+            "intune-query-results-"
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss"))
+                + ".csv"));
+    chooser.setFileFilter(new FileNameExtensionFilter("CSV files (*.csv)", "csv"));
+
+    Window window = SwingUtilities.getWindowAncestor(parent);
+    if (chooser.showSaveDialog(window) != JFileChooser.APPROVE_OPTION) {
+      return;
+    }
+
+    Path path = chooser.getSelectedFile().toPath();
+    String fileName = path.getFileName().toString();
+    if (!fileName.toLowerCase().endsWith(".csv")) {
+      path = path.resolveSibling(fileName + ".csv");
+    }
+
+    if (Files.exists(path)) {
+      int overwrite =
+          JOptionPane.showConfirmDialog(
+              window,
+              "File already exists. Overwrite?",
+              "Export CSV",
+              JOptionPane.YES_NO_OPTION,
+              JOptionPane.WARNING_MESSAGE);
+      if (overwrite != JOptionPane.YES_OPTION) {
+        return;
+      }
+    }
+
+    try {
+      writeTableModelAsCsv(model, path);
+      JOptionPane.showMessageDialog(
+          window,
+          "Exported " + model.getRowCount() + " row(s) to:\n" + path.toAbsolutePath(),
+          "Export CSV",
+          JOptionPane.INFORMATION_MESSAGE);
+    } catch (Exception e) {
+      JOptionPane.showMessageDialog(
+          window,
+          "Failed to export CSV:\n" + e.getMessage(),
+          "Export CSV",
+          JOptionPane.ERROR_MESSAGE);
+    }
+  }
+
+  private static void writeTableModelAsCsv(DefaultTableModel model, Path path) throws Exception {
+    try (BufferedWriter writer = Files.newBufferedWriter(path, StandardCharsets.UTF_8)) {
+      int columnCount = model.getColumnCount();
+      for (int col = 0; col < columnCount; col++) {
+        if (col > 0) {
+          writer.write(',');
+        }
+        writer.write(escapeCsv(model.getColumnName(col)));
+      }
+      writer.newLine();
+
+      for (int row = 0; row < model.getRowCount(); row++) {
+        for (int col = 0; col < columnCount; col++) {
+          if (col > 0) {
+            writer.write(',');
+          }
+          Object value = model.getValueAt(row, col);
+          writer.write(escapeCsv(value == null ? "" : String.valueOf(value)));
+        }
+        writer.newLine();
+      }
+    }
+  }
+
+  private static String escapeCsv(String value) {
+    if (value == null) {
+      return "";
+    }
+    boolean needsQuotes =
+        value.indexOf(',') >= 0
+            || value.indexOf('"') >= 0
+            || value.indexOf('\n') >= 0
+            || value.indexOf('\r') >= 0;
+    if (!needsQuotes) {
+      return value;
+    }
+    return '"' + value.replace("\"", "\"\"") + '"';
   }
 
   private static JPanel buildCommandPanel() {
