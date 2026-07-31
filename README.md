@@ -13,13 +13,17 @@ Java tool for performing bulk actions on Intune-enrolled devices via Microsoft G
 
 ## Recent updates
 - Default no-args startup now launches GUI mode (instead of shell).
-- GUI group actions now include:
-  - `Group Devices`
-  - `Sync Group`
-  - `Reboot Group`
-  - `Remove Primary User Group`
+- GUI layout updates:
+  - query row now uses `Users` + `Devices` (Groups button removed)
+  - group row now uses `Group Members`
+  - dedicated action rows for `Sync Group`, then `Reboot Group` + `Remove Primary User Group`
+  - `Reboot Group` is highlighted yellow; `Remove Primary User Group` is highlighted red
+- GUI now includes a result search box (case-insensitive filter) and `Export CSV`.
+- GUI now shows an elapsed timer next to status/progress text while queries/actions are running.
 - Group device resolution is now faster due to parallel managed-device lookup in `GroupDeviceResolver`.
 - GUI reuses resolved group devices with a short in-session cache for repeated actions.
+- GUI now caches Users and Devices query results in-memory for repeated button clicks within a session.
+- GUI internals were refactored into smaller files: `GuiRuntime`, `GuiActionPanel`, `GuiResultsPanel`, and `GroupOption`.
 - GUI Quick Start commands now reference packaged `.exe` usage.
 
 ## Build
@@ -82,6 +86,8 @@ You can put auth settings in a config file instead of exporting env vars each ti
   - jar/classpath folder (`...\ibt.cfg`)
   - parent of jar/classpath folder (useful for packaged app-image layout)
 - Precedence: environment variables override config file values
+- If no `ibt.cfg` is found, the app creates one with a default template.
+- If `INTUNE_TENANT_ID` or `INTUNE_CLIENT_ID` is missing/blank in `ibt.cfg`, the app prompts for values and writes them back to the file.
 
 Example `ibt.cfg`:
 
@@ -104,8 +110,10 @@ Inside `shell`:
 
 ## GUI actions
 Inside `gui`:
-- Query buttons: `Groups`, `Users`, `Devices`
-- Group selector actions: `Group Devices`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`
+- Query buttons: `Users`, `Devices`
+- Group selector actions: `Group Members`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`
+- Query results support live filtering and CSV export.
+- Progress/status area includes an elapsed timer while tasks are running.
 - Actions execute against all resolvable managed devices in the selected group (with confirmation prompts for mutating operations).
 
 ## Architecture
