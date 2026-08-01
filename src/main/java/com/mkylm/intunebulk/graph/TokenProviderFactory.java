@@ -22,6 +22,24 @@ import java.util.Set;
  * </ul>
  */
 public final class TokenProviderFactory {
+  private static final SecureTokenStore FALLBACK_TOKEN_STORE =
+      new SecureTokenStore() {
+        @Override
+        public java.util.Optional<String> loadSerializedCache() {
+          return java.util.Optional.empty();
+        }
+
+        @Override
+        public void saveSerializedCache(String serializedCache) {
+          // no-op fallback
+        }
+
+        @Override
+        public void clear() {
+          // no-op fallback
+        }
+      };
+
   public static TokenProvider fromEnvironment() {
     // Entry point for auth selection used by all commands.
     // Default is interactive browser flow.
@@ -51,8 +69,7 @@ public final class TokenProviderFactory {
     String authority = "https://login.microsoftonline.com/" + tenantId + "/";
 
     try {
-      PublicClientApplication app =
-          PublicClientApplication.builder(clientId).authority(authority).build();
+      PublicClientApplication app = createPublicClientApplication(clientId, authority);
       return new InteractiveBrowserTokenProvider(app, scopes, java.net.URI.create(redirect));
     } catch (MalformedURLException e) {
       throw new IllegalStateException("Invalid authority URL: " + authority, e);
@@ -70,8 +87,7 @@ public final class TokenProviderFactory {
     String authority = "https://login.microsoftonline.com/" + tenantId + "/";
 
     try {
-      PublicClientApplication app =
-          PublicClientApplication.builder(clientId).authority(authority).build();
+      PublicClientApplication app = createPublicClientApplication(clientId, authority);
       return new DeviceCodeTokenProvider(
           app,
           scopes,
@@ -92,6 +108,24 @@ public final class TokenProviderFactory {
             "DeviceManagementManagedDevices.ReadWrite.All",
             "DeviceManagementManagedDevices.PrivilegedOperations.All");
     return new LinkedHashSet<>(Env.csvList("INTUNE_SCOPES", defaults));
+  }
+
+  private static PublicClientApplication createPublicClientApplication(String clientId, String authority)
+      throws MalformedURLException {
+    SecureTokenStore tokenStore = createSecureTokenStore();
+    MsalTokenCacheAccessAspect aspect = new MsalTokenCacheAccessAspect(tokenStore);
+    return PublicClientApplication.builder(clientId)
+        .authority(authority)
+        .setTokenCacheAccessAspect(aspect)
+        .build();
+  }
+
+  private static SecureTokenStore createSecureTokenStore() {
+    try {
+      return new WindowsSecureTokenStore();
+    } catch (Exception ex) {
+      return FALLBACK_TOKEN_STORE;
+    }
   }
 
   private TokenProviderFactory() {}

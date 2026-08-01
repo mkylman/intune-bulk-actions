@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import javax.swing.JTable;
 import javax.swing.JTextField;
@@ -32,8 +33,7 @@ final class GuiRuntime {
   JTextField resultsFilterField;
   private long progressStartedAtMs;
   private final Map<String, CachedGroupDevices> groupDevicesCache = new HashMap<>();
-  private List<String[]> usersRowsCache;
-  private List<String[]> devicesRowsCache;
+  private final Map<String, List<String[]>> reportRowsCache = new HashMap<>();
 
   GraphClient graph() {
     if (graph == null) {
@@ -62,42 +62,43 @@ final class GuiRuntime {
     return resolved;
   }
 
-  synchronized List<String[]> loadUsersRows() {
-    if (usersRowsCache != null) {
-      return copyRows(usersRowsCache);
+  synchronized List<String[]> loadReportRows(ReportDefinition report) {
+    if (report == null) {
+      throw new IllegalArgumentException("Report definition is required.");
+    }
+    if (report.cacheable()) {
+      List<String[]> cached = reportRowsCache.get(report.id());
+      if (cached != null) {
+        return copyRows(cached);
+      }
     }
 
-    String path =
-        "/users?$select=id,displayName,userPrincipalName";
-    List<JsonNode> rows = graph().getV1PagedValues(path);
+    List<JsonNode> graphRows;
+    if (report.maxItems() != null) {
+      graphRows = graph().getV1PagedValues(report.endpoint(), report.maxItems());
+    } else {
+      graphRows = graph().getV1PagedValues(report.endpoint());
+    }
+
+    List<String> fields = report.fields();
     List<String[]> tableRows = new ArrayList<>();
-    for (JsonNode row : rows) {
-      tableRows.add(
-          new String[] {
-            text(row, "displayName"), text(row, "userPrincipalName"), text(row, "id")
-          });
-    }
-    sortRowsByColumn(tableRows, 0);
-    usersRowsCache = copyRows(tableRows);
-    return copyRows(usersRowsCache);
-  }
-
-  synchronized List<String[]> loadDevicesRows() {
-    if (devicesRowsCache != null) {
-      return copyRows(devicesRowsCache);
+    for (JsonNode row : graphRows) {
+      if (!matchesFilter(row, report.filter())) {
+        continue;
+      }
+      String[] mapped = new String[fields.size()];
+      for (int i = 0; i < fields.size(); i++) {
+        mapped[i] = textAtPath(row, fields.get(i));
+      }
+      tableRows.add(mapped);
     }
 
-    String path =
-        "/deviceManagement/managedDevices?$select="
-            + java.net.URLEncoder.encode("id,deviceName,serialNumber", java.nio.charset.StandardCharsets.UTF_8);
-    List<JsonNode> rows = graph().getV1PagedValues(path);
-    List<String[]> tableRows = new ArrayList<>();
-    for (JsonNode row : rows) {
-      tableRows.add(new String[] {text(row, "deviceName"), text(row, "serialNumber"), text(row, "id")});
+    sortRows(tableRows, report);
+
+    if (report.cacheable()) {
+      reportRowsCache.put(report.id(), copyRows(tableRows));
     }
-    sortRowsByColumn(tableRows, 0);
-    devicesRowsCache = copyRows(tableRows);
-    return copyRows(devicesRowsCache);
+    return copyRows(tableRows);
   }
 
   void applyResultsFilter() {
@@ -127,6 +128,86 @@ final class GuiRuntime {
     return groupResolver;
   }
 
+  private static boolean matchesFilter(JsonNode row, ReportFilter filter) {
+    if (filter == null) {
+      return true;
+    }
+
+    List<ReportCondition> conditions = filter.resolvedConditions();
+    if (conditions.isEmpty()) {
+      return true;
+    }
+
+    boolean requireAll = !"or".equals(filter.resolvedLogic());
+    if (requireAll) {
+      for (ReportCondition condition : conditions) {
+        if (!matchesCondition(row, condition)) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    for (ReportCondition condition : conditions) {
+      if (matchesCondition(row, condition)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean matchesCondition(JsonNode row, ReportCondition condition) {
+    if (condition == null) {
+      return true;
+    }
+    String op = condition.op() == null ? "" : condition.op().trim().toLowerCase(Locale.ROOT);
+    JsonNode actual = valueAtPath(row, condition.fieldPath());
+    String expected = condition.value() == null ? "" : condition.value().trim();
+    String actualText = actual == null || actual.isNull() ? "" : actual.asText("");
+
+    return switch (op) {
+      case "eq" -> {
+        if (actual == null || actual.isNull()) {
+          yield expected.isEmpty() || "null".equalsIgnoreCase(expected);
+        }
+        yield expected.equalsIgnoreCase(actualText);
+      }
+      case "contains" ->
+          !expected.isEmpty()
+              && actualText.toLowerCase(Locale.ROOT).contains(expected.toLowerCase(Locale.ROOT));
+      case "doesnotcontain" ->
+          expected.isEmpty()
+              || !actualText.toLowerCase(Locale.ROOT).contains(expected.toLowerCase(Locale.ROOT));
+      default -> true;
+    };
+  }
+
+  private static void sortRows(List<String[]> rows, ReportDefinition report) {
+    int columnIndex = 0;
+    if (report.sortByField() != null && !report.sortByField().isBlank()) {
+      int idx = report.fields().indexOf(report.sortByField());
+      if (idx >= 0) {
+        columnIndex = idx;
+      }
+    }
+
+    final int sortColumn = columnIndex;
+    rows.sort(
+        Comparator.comparing(
+            row -> {
+              if (row == null || sortColumn >= row.length || row[sortColumn] == null) {
+                return "";
+              }
+              return row[sortColumn];
+            },
+            String.CASE_INSENSITIVE_ORDER));
+
+    if (report.sortDirection() != null
+        && "desc".equalsIgnoreCase(report.sortDirection().trim())) {
+      java.util.Collections.reverse(rows);
+    }
+  }
+
   private static List<String[]> copyRows(List<String[]> rows) {
     List<String[]> copy = new ArrayList<>(rows.size());
     for (String[] row : rows) {
@@ -135,23 +216,22 @@ final class GuiRuntime {
     return copy;
   }
 
-  private static void sortRowsByColumn(List<String[]> rows, int columnIndex) {
-    rows.sort(
-        Comparator.comparing(
-            row -> {
-              if (row == null || columnIndex >= row.length || row[columnIndex] == null) {
-                return "";
-              }
-              return row[columnIndex];
-            },
-            String.CASE_INSENSITIVE_ORDER));
+  private static JsonNode valueAtPath(JsonNode node, String fieldPath) {
+    if (node == null || fieldPath == null || fieldPath.isBlank()) {
+      return null;
+    }
+    JsonNode current = node;
+    for (String part : fieldPath.split("\\.")) {
+      if (current == null || current.isNull() || !current.isObject()) {
+        return null;
+      }
+      current = current.get(part);
+    }
+    return current;
   }
 
-  private static String text(JsonNode node, String field) {
-    if (node == null) {
-      return "";
-    }
-    JsonNode value = node.get(field);
+  private static String textAtPath(JsonNode node, String fieldPath) {
+    JsonNode value = valueAtPath(node, fieldPath);
     if (value == null || value.isNull()) {
       return "";
     }

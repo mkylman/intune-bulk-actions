@@ -7,18 +7,28 @@ import java.awt.GridLayout;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.DefaultComboBoxModel;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 final class GuiActionPanel {
-  static Controls build() {
+  static Controls build(ReportRegistry reportRegistry) {
     JPanel panel = new JPanel(new BorderLayout());
     panel.setBorder(BorderFactory.createTitledBorder("Run Queries and Actions"));
 
-    JButton usersButton = new JButton("Users");
-    JButton devicesButton = new JButton("Devices");
-    JButton userGroupMembersButton = new JButton("User Group Members");
-    JButton deviceGroupMembersButton = new JButton("Device Group Members");
+    JButton runReportButton = new JButton("Run Report");
+    JComboBox<String> reportsDropdown = new JComboBox<>();
+    String[] reportLabels = reportRegistry.labels().toArray(String[]::new);
+    reportsDropdown.setModel(new DefaultComboBoxModel<>(reportLabels));
+    String prototype = "Expired Passwords";
+    for (String label : reportLabels) {
+      if (label != null && label.length() > prototype.length()) {
+        prototype = label;
+      }
+    }
+    reportsDropdown.setPrototypeDisplayValue(prototype);
+    JButton userGroupMembersButton = new JButton("Group Members");
+    JButton deviceGroupMembersButton = new JButton("Group Members");
     JButton syncGroupButton = new JButton("Sync Group");
     JButton rebootGroupButton = new JButton("Reboot Group");
     JButton removePrimaryUserGroupButton = new JButton("Remove Primary User Group");
@@ -31,8 +41,9 @@ final class GuiActionPanel {
     JLabel statusLabel = new JLabel("Ready.");
 
     JPanel queryButtonsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    queryButtonsRow.add(usersButton);
-    queryButtonsRow.add(devicesButton);
+    queryButtonsRow.add(new JLabel("Reports:"));
+    queryButtonsRow.add(reportsDropdown);
+    queryButtonsRow.add(runReportButton);
 
     JPanel userGroupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     userGroupSelectionRow.add(new JLabel("User Groups:"));
@@ -70,8 +81,8 @@ final class GuiActionPanel {
 
     return new Controls(
         panel,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -84,8 +95,8 @@ final class GuiActionPanel {
 
   static final class Controls {
     final JPanel panel;
-    final JButton usersButton;
-    final JButton devicesButton;
+    final JButton runReportButton;
+    final JComboBox<String> reportsDropdown;
     final JButton userGroupMembersButton;
     final JButton deviceGroupMembersButton;
     final JButton syncGroupButton;
@@ -97,8 +108,8 @@ final class GuiActionPanel {
 
     Controls(
         JPanel panel,
-        JButton usersButton,
-        JButton devicesButton,
+        JButton runReportButton,
+        JComboBox<String> reportsDropdown,
         JButton userGroupMembersButton,
         JButton deviceGroupMembersButton,
         JButton syncGroupButton,
@@ -108,8 +119,8 @@ final class GuiActionPanel {
         JComboBox<GroupOption> deviceGroupDropdown,
         JLabel statusLabel) {
       this.panel = panel;
-      this.usersButton = usersButton;
-      this.devicesButton = devicesButton;
+      this.runReportButton = runReportButton;
+      this.reportsDropdown = reportsDropdown;
       this.userGroupMembersButton = userGroupMembersButton;
       this.deviceGroupMembersButton = deviceGroupMembersButton;
       this.syncGroupButton = syncGroupButton;

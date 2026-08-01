@@ -147,9 +147,15 @@ public final class IntuneBulkGuiApp {
   }
 
   private static JPanel buildActionPanel(GuiRuntime runtime) {
-    GuiActionPanel.Controls controls = GuiActionPanel.build();
-    JButton usersButton = controls.usersButton;
-    JButton devicesButton = controls.devicesButton;
+    ConfigBootstrapState configState = loadConfigBootstrapState();
+    Path reportsPath =
+        configState.cfgPath().toAbsolutePath().normalize().resolveSibling("reports.json");
+    ReportRegistry reportRegistry = ReportRegistry.loadOrDefaults(reportsPath);
+    System.out.println("[GUI] " + reportRegistry.loadMessage());
+
+    GuiActionPanel.Controls controls = GuiActionPanel.build(reportRegistry);
+    JButton runReportButton = controls.runReportButton;
+    JComboBox<String> reportsDropdown = controls.reportsDropdown;
     JButton userGroupMembersButton = controls.userGroupMembersButton;
     JButton deviceGroupMembersButton = controls.deviceGroupMembersButton;
     JButton syncGroupButton = controls.syncGroupButton;
@@ -159,42 +165,35 @@ public final class IntuneBulkGuiApp {
     JComboBox<GroupOption> deviceGroupDropdown = controls.deviceGroupDropdown;
     JLabel statusLabel = controls.statusLabel;
 
-    usersButton.addActionListener(
-        event ->
-            runUsers(
-                runtime,
-                statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
-                userGroupMembersButton,
-                deviceGroupMembersButton,
-                syncGroupButton,
-                rebootGroupButton,
-                userGroupDropdown,
-                deviceGroupDropdown));
-    devicesButton.addActionListener(
-        event ->
-            runDevices(
-                runtime,
-                statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
-                userGroupMembersButton,
-                deviceGroupMembersButton,
-                syncGroupButton,
-                rebootGroupButton,
-                userGroupDropdown,
-                deviceGroupDropdown));
+    runReportButton.addActionListener(
+        event -> {
+          String selectedLabel = (String) reportsDropdown.getSelectedItem();
+          ReportDefinition selected =
+              reportRegistry.findByLabel(selectedLabel).orElse(null);
+          if (selected == null) {
+            statusLabel.setText("Unknown report selection.");
+            return;
+          }
+          runReport(
+              runtime,
+              selected,
+              statusLabel,
+              runReportButton,
+              reportsDropdown,
+              userGroupMembersButton,
+              deviceGroupMembersButton,
+              syncGroupButton,
+              rebootGroupButton,
+              userGroupDropdown,
+              deviceGroupDropdown);
+        });
     userGroupMembersButton.addActionListener(
         event ->
             runUserGroupMembers(
                 runtime,
                 statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
+                runReportButton,
+                reportsDropdown,
                 userGroupMembersButton,
                 deviceGroupMembersButton,
                 syncGroupButton,
@@ -206,9 +205,8 @@ public final class IntuneBulkGuiApp {
             runGroupDevices(
                 runtime,
                 statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
+                runReportButton,
+                reportsDropdown,
                 userGroupMembersButton,
                 deviceGroupMembersButton,
                 syncGroupButton,
@@ -220,9 +218,8 @@ public final class IntuneBulkGuiApp {
             runSyncGroup(
                 runtime,
                 statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
+                runReportButton,
+                reportsDropdown,
                 userGroupMembersButton,
                 deviceGroupMembersButton,
                 syncGroupButton,
@@ -234,9 +231,8 @@ public final class IntuneBulkGuiApp {
             runRebootGroup(
                 runtime,
                 statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
+                runReportButton,
+                reportsDropdown,
                 userGroupMembersButton,
                 deviceGroupMembersButton,
                 syncGroupButton,
@@ -248,9 +244,8 @@ public final class IntuneBulkGuiApp {
             runRemovePrimaryUserGroup(
                 runtime,
                 statusLabel,
-//              groupsButton,
-                usersButton,
-                devicesButton,
+                runReportButton,
+                reportsDropdown,
                 userGroupMembersButton,
                 deviceGroupMembersButton,
                 syncGroupButton,
@@ -261,9 +256,8 @@ public final class IntuneBulkGuiApp {
     loadGroupsIntoDropdown(
         runtime,
         statusLabel,
-//        groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -405,9 +399,8 @@ public final class IntuneBulkGuiApp {
   private static void runGroups(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -417,9 +410,8 @@ public final class IntuneBulkGuiApp {
     runQuery(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -441,12 +433,12 @@ public final class IntuneBulkGuiApp {
         "Loaded groups.");
   }
 
-  private static void runUsers(
+  private static void runReport(
       GuiRuntime runtime,
+      ReportDefinition report,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -456,57 +448,25 @@ public final class IntuneBulkGuiApp {
     runQuery(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
         userGroupDropdown,
         deviceGroupDropdown,
-        "Loading users...",
-        new String[] {"Display Name", "UPN", "User ID"},
-        runtime::loadUsersRows,
-        "Loaded users.");
-  }
-
-  private static void runDevices(
-      GuiRuntime runtime,
-      JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
-      JButton userGroupMembersButton,
-      JButton deviceGroupMembersButton,
-      JButton syncGroupButton,
-      JButton rebootGroupButton,
-      JComboBox<GroupOption> userGroupDropdown,
-      JComboBox<GroupOption> deviceGroupDropdown) {
-    runQuery(
-        runtime,
-        statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
-        userGroupMembersButton,
-        deviceGroupMembersButton,
-        syncGroupButton,
-        rebootGroupButton,
-        userGroupDropdown,
-        deviceGroupDropdown,
-        "Loading devices...",
-        new String[] {"Device Name", "Serial", "Managed Device ID"},
-        runtime::loadDevicesRows,
-        "Loaded devices.");
+        "Loading " + report.label() + "...",
+        report.columns().toArray(String[]::new),
+        () -> runtime.loadReportRows(report),
+        "Loaded " + report.label() + ".");
   }
 
   private static void loadGroupsIntoDropdown(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -514,9 +474,8 @@ public final class IntuneBulkGuiApp {
       JComboBox<GroupOption> userGroupDropdown,
       JComboBox<GroupOption> deviceGroupDropdown) {
     setActionControlsEnabled(
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -616,9 +575,8 @@ public final class IntuneBulkGuiApp {
                 long elapsedMs = runtime.stopProgressTimer();
                 statusLabel.setText(statusLabel.getText() + " | " + elapsedMs + " ms");
                 setActionControlsEnabled(
-//                  groupsButton,
-                    usersButton,
-                    devicesButton,
+                    runReportButton,
+                    reportsDropdown,
                     userGroupMembersButton,
                     deviceGroupMembersButton,
                     syncGroupButton,
@@ -724,6 +682,7 @@ public final class IntuneBulkGuiApp {
       ensureConfigFileExists(selected);
     }
 
+    ensureReportsFileExists(selected);
     Map<String, String> values = parseConfigFile(selected);
     return new ConfigBootstrapState(
         selected,
@@ -742,6 +701,21 @@ public final class IntuneBulkGuiApp {
       }
     } catch (Exception e) {
       throw new IllegalStateException("Failed creating ibt.cfg at " + cfgPath, e);
+    }
+  }
+
+  private static void ensureReportsFileExists(Path cfgPath) {
+    Path reportsPath = cfgPath.toAbsolutePath().normalize().resolveSibling("reports.json");
+    try {
+      Path parent = reportsPath.getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      if (!Files.exists(reportsPath)) {
+        Files.writeString(reportsPath, ReportRegistry.DEFAULT_REPORTS_JSON);
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed creating reports.json at " + reportsPath, e);
     }
   }
 
@@ -891,9 +865,8 @@ public final class IntuneBulkGuiApp {
   private static void runSyncGroup(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -903,9 +876,8 @@ public final class IntuneBulkGuiApp {
     runGroupAction(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -920,9 +892,8 @@ public final class IntuneBulkGuiApp {
   private static void runRebootGroup(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -932,9 +903,8 @@ public final class IntuneBulkGuiApp {
     runGroupAction(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -949,9 +919,8 @@ public final class IntuneBulkGuiApp {
   private static void runRemovePrimaryUserGroup(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -961,9 +930,8 @@ public final class IntuneBulkGuiApp {
     runGroupAction(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -978,9 +946,8 @@ public final class IntuneBulkGuiApp {
   private static void runGroupAction(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -1012,9 +979,8 @@ public final class IntuneBulkGuiApp {
     }
 
     setActionControlsEnabled(
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -1071,9 +1037,8 @@ public final class IntuneBulkGuiApp {
           long elapsedMs = runtime.stopProgressTimer();
           statusLabel.setText(statusLabel.getText() + " | " + elapsedMs + " ms");
           setActionControlsEnabled(
-//            groupsButton,
-              usersButton,
-              devicesButton,
+              runReportButton,
+              reportsDropdown,
               userGroupMembersButton,
               deviceGroupMembersButton,
               syncGroupButton,
@@ -1089,9 +1054,8 @@ public final class IntuneBulkGuiApp {
   private static void runQuery(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -1103,9 +1067,8 @@ public final class IntuneBulkGuiApp {
       QueryRunner queryRunner,
       String donePrefix) {
     setActionControlsEnabled(
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -1143,9 +1106,8 @@ public final class IntuneBulkGuiApp {
             runtime.stopProgressTimer();
           }
           setActionControlsEnabled(
-//            groupsButton,
-              usersButton,
-              devicesButton,
+              runReportButton,
+              reportsDropdown,
               userGroupMembersButton,
               deviceGroupMembersButton,
               syncGroupButton,
@@ -1161,8 +1123,8 @@ public final class IntuneBulkGuiApp {
   private static void runUserGroupMembers(
       GuiRuntime runtime,
       JLabel statusLabel,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -1182,8 +1144,8 @@ public final class IntuneBulkGuiApp {
     runQuery(
         runtime,
         statusLabel,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -1213,9 +1175,8 @@ public final class IntuneBulkGuiApp {
   private static void runGroupDevices(
       GuiRuntime runtime,
       JLabel statusLabel,
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -1235,9 +1196,8 @@ public final class IntuneBulkGuiApp {
     runQuery(
         runtime,
         statusLabel,
-//      groupsButton,
-        usersButton,
-        devicesButton,
+        runReportButton,
+        reportsDropdown,
         userGroupMembersButton,
         deviceGroupMembersButton,
         syncGroupButton,
@@ -1302,9 +1262,8 @@ public final class IntuneBulkGuiApp {
   }
 
   private static void setActionControlsEnabled(
-//    JButton groupsButton,
-      JButton usersButton,
-      JButton devicesButton,
+      JButton runReportButton,
+      JComboBox<String> reportsDropdown,
       JButton userGroupMembersButton,
       JButton deviceGroupMembersButton,
       JButton syncGroupButton,
@@ -1312,9 +1271,8 @@ public final class IntuneBulkGuiApp {
       JComboBox<GroupOption> userGroupDropdown,
       JComboBox<GroupOption> deviceGroupDropdown,
       boolean enabled) {
-//  groupsButton.setEnabled(enabled);
-    usersButton.setEnabled(enabled);
-    devicesButton.setEnabled(enabled);
+    runReportButton.setEnabled(enabled);
+    reportsDropdown.setEnabled(enabled);
     userGroupMembersButton.setEnabled(enabled);
     deviceGroupMembersButton.setEnabled(enabled);
     syncGroupButton.setEnabled(enabled);

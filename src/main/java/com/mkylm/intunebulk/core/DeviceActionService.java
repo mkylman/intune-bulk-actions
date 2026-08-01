@@ -31,16 +31,19 @@ public final class DeviceActionService {
   public record ProgressSnapshot(
       int total, int completed, int succeeded, int failed, int skipped, ActionResult latestResult) {}
 
+  // Graph client for interacting with Intune Graph API.
   private final GraphClient graph;
 
   public DeviceActionService(GraphClient graph) {
     this.graph = graph;
   }
 
+  // Executes the action request and returns the results.
   public List<ActionResult> execute(ActionRequest req) {
     return execute(req, null);
   }
 
+  // Executes the action request and returns the results with progress updates.
   public List<ActionResult> execute(ActionRequest req, ProgressListener progressListener) {
     List<ActionResult> out = new ArrayList<>();
     ActionOptions opt = req.options();
