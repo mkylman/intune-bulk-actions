@@ -22,20 +22,38 @@ This document describes the runtime flow of `intune-bulk-actions` from process s
      - Delegates to `IntuneBulkGuiApp.launch()`.
 
 4. GUI bootstrap and window assembly
-   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+   - Files:
+     - `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+     - `src/main/java/com/mkylm/intunebulk/gui/GuiActionPanel.java`
+     - `src/main/java/com/mkylm/intunebulk/gui/GuiResultsPanel.java`
+     - `src/main/java/com/mkylm/intunebulk/gui/GuiRuntime.java`
    - Behavior:
+     - Builds the main frame but keeps it hidden until splash flow is closed.
+     - Composes GUI via extracted panel/runtime classes.
      - Creates runtime services lazily (`GraphClient`, `GroupDeviceResolver`, `DeviceActionService`).
-     - Builds query controls and group action controls.
-     - Loads group names into the dropdown asynchronously.
+     - Starts splash-first initialization and asynchronously loads/classifies groups.
 
-5. GUI query/actions available
+5. Splash-first configuration and authentication
    - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
    - Behavior:
-     - Query buttons: `Groups`, `Users`, `Devices`.
-     - Group-scoped controls: `Group Devices`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`.
-     - Mutating operations show confirmation dialogs before execution.
+     - Shows an always-on-top splash dialog.
+     - Prompts for `INTUNE_TENANT_ID` and `INTUNE_CLIENT_ID` in one dialog section (prefilled from discovered `ibt.cfg` when present).
+     - Requires explicit `Confirm` to persist config before auth.
+     - Enables `Authenticate and Continue` only after config is saved.
+     - Writes config values, pins runtime config path (`intune.config.file`), suppresses fallback GUI config prompts (`intune.gui.suppressConfigPrompt=true`), and then authenticates.
+     - Displays progress/activity lines and requires explicit `OK` to close splash.
 
-6. Group device resolution (shared core path)
+6. GUI query/actions available
+   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+   - Behavior:
+     - Query buttons: `Users`, `Devices`.
+     - User-group controls: `User Groups` + `User Group Members`.
+     - Device-group controls: `Device Groups` + `Device Group Members`.
+     - Device-group actions: `Sync Group`, `Reboot Group`, `Remove Primary User Group`.
+     - Mutating operations show confirmation dialogs before execution.
+     - Main status line appends elapsed milliseconds after completion (e.g., `| 1843 ms`).
+
+7. Group device resolution (shared core path)
    - File: `src/main/java/com/mkylm/intunebulk/core/GroupDeviceResolver.java`
    - Behavior:
      - Reads transitive Entra device membership:
@@ -44,18 +62,28 @@ This document describes the runtime flow of `intune-bulk-actions` from process s
        - `/deviceManagement/managedDevices?$filter=azureADDeviceId eq '{id}'`
      - Emits progress snapshots (used by shell progress bar; GUI can run async without console progress).
 
-7. Resolution performance improvements
+8. Resolution performance improvements
    - File: `src/main/java/com/mkylm/intunebulk/core/GroupDeviceResolver.java`
    - Behavior:
      - Managed-device lookups now run with bounded parallelism (thread pool), reducing total latency for larger groups.
 
-8. GUI group-device cache
-   - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+9. GUI caches and filtering
+   - File: `src/main/java/com/mkylm/intunebulk/gui/GuiRuntime.java`
    - Behavior:
      - GUI runtime caches resolved group devices by group ID for a short TTL (5 minutes).
      - Repeated `Group Devices`, `Sync Group`, `Reboot Group`, and `Remove Primary User Group` calls reuse recent results.
+     - Caches users and devices query result rows in-memory for repeated clicks.
+     - Applies search/filter text to results table via row sorter.
 
-9. Action execution pipeline
+10. Group classification strategy for split dropdowns
+    - File: `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
+    - Behavior:
+      - Loads all groups once.
+      - Classifies each group into user/device buckets using first transitive member (`/groups/{id}/transitiveMembers?$top=1`) for speed.
+      - Uses bounded parallel worker pool for classification.
+      - Populates `User Groups` and `Device Groups` dropdowns separately.
+
+11. Action execution pipeline
    - Files:
      - `src/main/java/com/mkylm/intunebulk/gui/IntuneBulkGuiApp.java`
      - `src/main/java/com/mkylm/intunebulk/core/DeviceActionService.java`
@@ -64,7 +92,7 @@ This document describes the runtime flow of `intune-bulk-actions` from process s
      - Executes device actions concurrently with retry/backoff behavior.
      - Updates result table with per-device outcomes and aggregate counts.
 
-10. Graph transport layer
+12. Graph transport layer
     - File: `src/main/java/com/mkylm/intunebulk/graph/GraphClient.java`
     - Behavior:
       - Handles authenticated GET/POST/DELETE requests.
@@ -125,10 +153,12 @@ This document describes the runtime flow of `intune-bulk-actions` from process s
    - File: `src/main/java/com/mkylm/intunebulk/graph/Env.java`
    - Behavior:
      - Checks:
+       - `intune.config.file` JVM property (GUI flow pinning)
        - `INTUNE_CONFIG_FILE` explicit path
        - current working directory
        - classpath directory
        - classpath parent directory (app-image-friendly)
+     - In GUI flow, fallback prompt behavior can be suppressed via `intune.gui.suppressConfigPrompt=true`.
 
 4. Token acquisition behavior
    - Files:
@@ -151,11 +181,19 @@ For one-shot commands, the same core path runs through:
 - Packaged app-image launcher: `dist/intune-bulk-actions/intune-bulk-actions.exe`
 - Default packaged launch behavior opens GUI mode.
 - Quick-start UX in GUI references `.exe` commands (not `mvnw`).
+- Windows app-image packaging currently omits `--win-console`, so GUI launch does not create a console window by default.
+
+## Known Tradeoffs
+
+- Group type filtering uses a fast first-member heuristic (`/groups/{id}/transitiveMembers?$top=1`) to classify groups as user- or device-based.
+- Mixed-member groups can be misclassified if the first returned member is not representative of the group.
+- Classification favors startup speed over exhaustive accuracy; deeper per-group scans would be more accurate but significantly slower and more API-intensive.
+- Group classification runs parallel Graph lookups; this improves latency but can increase short burst API pressure in large tenants.
 
 ## Key Layer Boundaries
 
 - `cli`: command parsing, user interaction, progress bars, output rendering
-- `gui`: desktop UI composition, async workflow orchestration, GUI-only short-lived caching
+- `gui`: desktop UI composition, splash/config/auth workflow orchestration, async query/action orchestration, GUI-only short-lived caching
 - `core`: domain logic (resolve + execute + retry + action/result modeling)
 - `graph`: token acquisition, config/env parsing, HTTP transport, Graph pagination/error handling
 
