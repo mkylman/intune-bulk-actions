@@ -9,12 +9,17 @@ Java tool for performing bulk actions on Intune-enrolled devices via Microsoft G
 - Graph abstraction (`GraphClient`) + token provider abstraction (`TokenProvider`)
 - Throttling-aware retry framework
 - Interactive terminal shell: `shell` (browse groups/users/devices, resolve group members, run group actions)
-- Desktop GUI mode: `gui` (queries, group device resolution, and group actions)
+- Desktop GUI mode: `gui` (config-driven reports, group device resolution, and group actions)
+- Secure MSAL token cache on Windows (DPAPI-backed) for interactive / device-code auth
+- Config-driven GUI reports via `reports.json` (add custom reports without rebuilding)
 
 ## Recent updates
 - Default no-args startup now launches GUI mode (instead of shell).
+- Interactive and device-code auth can persist the MSAL token cache via a Windows DPAPI-backed store, so reopens often skip a fresh browser login.
+- GUI reports are config-driven from `reports.json` (created next to `ibt.cfg` if missing, with built-in defaults). This lets users add or change custom reports without rebuilding the app.
+- Reports support Graph endpoints, column/field mapping, optional post-query filters (`eq`, `contains`, `doesnotcontain`, plus `and`/`or` compounds), sorting, max items, and per-report caching.
 - GUI layout updates:
-  - query row now uses `Users` + `Devices` (Groups button removed)
+  - query row uses a `Reports` dropdown + `Run Report` (replacing hardcoded Users/Devices buttons)
   - split group selectors into `User Groups` + `User Group Members` and `Device Groups` + `Device Group Members`
   - dropdowns are filtered by inferred member type during initial load/classification
   - dedicated action rows for `Sync Group`, then `Reboot Group` + `Remove Primary User Group` (device-group scoped)
@@ -24,8 +29,8 @@ Java tool for performing bulk actions on Intune-enrolled devices via Microsoft G
 - Initial group loading/classification now shows an always-on-top splash dialog with progress/activity text and an `OK` close button.
 - Group device resolution is now faster due to parallel managed-device lookup in `GroupDeviceResolver`.
 - GUI reuses resolved group devices with a short in-session cache for repeated actions.
-- GUI now caches Users and Devices query results in-memory for repeated button clicks within a session.
-- GUI internals were refactored into smaller files: `GuiRuntime`, `GuiActionPanel`, `GuiResultsPanel`, and `GroupOption`.
+- GUI caches report results in-memory by report id (when `cacheable` is true) for repeated runs within a session.
+- GUI internals were refactored into smaller files: `GuiRuntime`, `GuiActionPanel`, `GuiResultsPanel`, `GroupOption`, and report models (`ReportDefinition`, `ReportFilter`, `ReportCondition`, `ReportRegistry`).
 - GUI Quick Start commands now reference packaged `.exe` usage.
 
 ## Build
@@ -79,6 +84,8 @@ $env:INTUNE_AUTH_MODE="device_code"
 java -jar target/intune-bulk-actions-0.1.0.jar shell
 ```
 
+On Windows, interactive and device-code flows can persist the MSAL token cache using DPAPI so later launches can acquire tokens silently when possible.
+
 ## Config file (`ibt.cfg`)
 You can put auth settings in a config file instead of exporting env vars each time.
 
@@ -100,6 +107,23 @@ INTUNE_CLIENT_ID=your-client-guid
 INTUNE_REDIRECT_URI=http://localhost
 ```
 
+## Reports config (`reports.json`)
+GUI report options are loaded from `reports.json` in the same directory as the resolved `ibt.cfg`.
+
+- If the file is missing, the app creates one with built-in defaults (All Users, All Devices, Expired Passwords).
+- If the file is present but invalid, the GUI falls back to those built-in defaults.
+- Editing `reports.json` lets users define custom reports (new Graph endpoints, columns, fields, filters) without rebuilding or repackaging the app.
+- Restart the GUI after editing `reports.json` to pick up changes.
+
+Each report entry includes:
+- `id`, `label` — stable id and dropdown text
+- `endpoint` — Microsoft Graph v1 path (including `$select` as needed)
+- `columns` / `fields` — table headers and matching Graph field paths (same length/order)
+- `filter` — optional; either a simple `{ fieldPath, op, value }` or a compound `{ logic, conditions }` where `logic` is `and`/`or` and each condition uses `eq`, `contains`, or `doesnotcontain`
+- `sortByField`, `sortDirection` — optional sort (`asc`/`desc`)
+- `maxItems` — optional page cap
+- `cacheable` — when `true`, reuse in-session results for that report id
+
 ## Shell commands
 Inside `shell`:
 - `groups [--top N] [--prefix TEXT]`
@@ -112,7 +136,7 @@ Inside `shell`:
 
 ## GUI actions
 Inside `gui`:
-- Query buttons: `Users`, `Devices`
+- Reports dropdown + `Run Report` (options come from `reports.json`)
 - User group selector: `User Groups` + `User Group Members`
 - Device group selector: `Device Groups` + `Device Group Members`
 - Group actions (`Sync Group`, `Reboot Group`, `Remove Primary User Group`) run against the selected device group.
