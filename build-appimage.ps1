@@ -31,7 +31,6 @@ if (-not (Test-Path $jpackageExe)) {
 Write-Host "Creating app image..."
 & $jpackageExe `
     --type app-image `
-    --win-console `
     --name $AppName `
     --input ".\target" `
     --main-jar "$AppName-$Version.jar" `

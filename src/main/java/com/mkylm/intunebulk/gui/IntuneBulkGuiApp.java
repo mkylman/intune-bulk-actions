@@ -14,6 +14,7 @@ import java.awt.Frame;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.awt.GridLayout;
 import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.datatransfer.StringSelection;
@@ -26,7 +27,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.StringTokenizer;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -48,6 +52,7 @@ import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
+import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 import javax.swing.UIManager;
@@ -57,6 +62,18 @@ import javax.swing.table.TableRowSorter;
 
 /** Desktop GUI shell to complement the existing CLI workflow. */
 public final class IntuneBulkGuiApp {
+  private static final String DEFAULT_CFG_TEMPLATE =
+      String.join(
+              System.lineSeparator(),
+              "# intune-bulk-tools config template",
+              "# Environment variables override values from ibt.cfg.",
+              "",
+              "INTUNE_AUTH_MODE=interactive",
+              "INTUNE_TENANT_ID=",
+              "INTUNE_CLIENT_ID=",
+              "INTUNE_REDIRECT_URI=http://localhost")
+          + System.lineSeparator();
+
   public static void launch() {
     System.out.println("[GUI] Launch requested.");
     System.out.println("[GUI] Headless mode: " + GraphicsEnvironment.isHeadless());
@@ -126,7 +143,7 @@ public final class IntuneBulkGuiApp {
     frame.add(buildCommandPanel(), BorderLayout.SOUTH);
 
     frame.pack();
-    frame.setVisible(true);
+    frame.setVisible(false);
   }
 
   private static JPanel buildActionPanel(GuiRuntime runtime) {
@@ -507,81 +524,119 @@ public final class IntuneBulkGuiApp {
         userGroupDropdown,
         deviceGroupDropdown,
         false);
-    statusLabel.setText("Loading and classifying groups...");
-    runtime.startProgressTimer();
-    GroupLoadingSplash splash = GroupLoadingSplash.showFor(statusLabel);
+    statusLabel.setText("Waiting for configuration input...");
+    ConfigBootstrapState configState = loadConfigBootstrapState();
+    GroupLoadingSplash splash = GroupLoadingSplash.showFor(statusLabel, configState);
+    splash.setCloseHandler(
+        () -> {
+          Window owner = SwingUtilities.getWindowAncestor(statusLabel);
+          if (owner != null && !owner.isVisible()) {
+            owner.setVisible(true);
+          }
+        });
+    splash.setConfirmHandler(
+        (tenantId, clientId) -> {
+          String tenant = tenantId == null ? "" : tenantId.trim();
+          String client = clientId == null ? "" : clientId.trim();
+          if (tenant.isBlank() || client.isBlank()) {
+            splash.update(new GroupClassificationUpdate("Tenant ID and Client ID are required.", 0, 0));
+            return;
+          }
+          try {
+            writeConfigValues(configState.cfgPath(), tenant, client);
+            // Pin runtime config path for this process before auth starts.
+            System.setProperty("intune.config.file", configState.cfgPath().toAbsolutePath().toString());
+            System.setProperty("intune.gui.suppressConfigPrompt", "true");
+            splash.markConfigSaved(configState.cfgPath());
+            statusLabel.setText("Configuration saved. Ready to authenticate.");
+          } catch (Exception e) {
+            splash.update(new GroupClassificationUpdate("Failed to write ibt.cfg values.", 0, 0));
+            JOptionPane.showMessageDialog(
+                null,
+                "Could not save ibt.cfg values: " + e.getMessage(),
+                "Config Save Error",
+                JOptionPane.ERROR_MESSAGE);
+          }
+        });
+    splash.setStartHandler(
+        () -> {
+          if (!splash.isConfigSaved()) {
+            splash.update(new GroupClassificationUpdate("Click Confirm first to save ibt.cfg.", 0, 0));
+            return;
+          }
+          splash.startWorkPhase();
+          runtime.startProgressTimer();
+          statusLabel.setText("Loading and classifying groups...");
 
-    new SwingWorker<GroupDropdownSets, Void>() {
-      @Override
-      protected GroupDropdownSets doInBackground() {
-        return fetchAndClassifyGroupOptions(
-            runtime,
-            update ->
-                SwingUtilities.invokeLater(
-                    () -> {
-                      if (splash != null) {
-                        splash.update(update);
-                      }
-                    }));
-      }
+          new SwingWorker<GroupDropdownSets, Void>() {
+            @Override
+            protected GroupDropdownSets doInBackground() {
+              return fetchAndClassifyGroupOptions(
+                  runtime,
+                  update ->
+                      SwingUtilities.invokeLater(
+                          () -> {
+                            splash.update(update);
+                          }));
+            }
 
-      @Override
-      protected void done() {
-        try {
-          GroupDropdownSets groupSets = get();
-          DefaultComboBoxModel<GroupOption> userModel = new DefaultComboBoxModel<>();
-          DefaultComboBoxModel<GroupOption> deviceModel = new DefaultComboBoxModel<>();
-          for (GroupOption group : groupSets.userGroups()) {
-            userModel.addElement(group);
-          }
-          for (GroupOption group : groupSets.deviceGroups()) {
-            deviceModel.addElement(group);
-          }
-          userGroupDropdown.setModel(userModel);
-          deviceGroupDropdown.setModel(deviceModel);
-          statusLabel.setText(
-              "Loaded groups. User groups: "
-                  + groupSets.userGroups().size()
-                  + " Device groups: "
-                  + groupSets.deviceGroups().size());
-          if (splash != null) {
-            splash.markComplete(
-                "Classification complete. User groups: "
-                    + groupSets.userGroups().size()
-                    + ", Device groups: "
-                    + groupSets.deviceGroups().size());
-          }
-        } catch (Exception ex) {
-          statusLabel.setText("Failed to load groups.");
-          if (splash != null) {
-            splash.markComplete("Classification failed. Review the error details and click OK to close.");
-          }
-          JOptionPane.showMessageDialog(
-              null,
-              "Could not load group list: " + ex.getMessage(),
-              "Group Load Error",
-              JOptionPane.ERROR_MESSAGE);
-        } finally {
-          long elapsedMs = runtime.stopProgressTimer();
-          statusLabel.setText(statusLabel.getText() + " | " + elapsedMs + " ms");
-          setActionControlsEnabled(
-//            groupsButton,
-              usersButton,
-              devicesButton,
-              userGroupMembersButton,
-              deviceGroupMembersButton,
-              syncGroupButton,
-              rebootGroupButton,
-              userGroupDropdown,
-              deviceGroupDropdown,
-              true);
-        }
-      }
-    }.execute();
+            @Override
+            protected void done() {
+              try {
+                GroupDropdownSets groupSets = get();
+                DefaultComboBoxModel<GroupOption> userModel = new DefaultComboBoxModel<>();
+                DefaultComboBoxModel<GroupOption> deviceModel = new DefaultComboBoxModel<>();
+                for (GroupOption group : groupSets.userGroups()) {
+                  userModel.addElement(group);
+                }
+                for (GroupOption group : groupSets.deviceGroups()) {
+                  deviceModel.addElement(group);
+                }
+                userGroupDropdown.setModel(userModel);
+                deviceGroupDropdown.setModel(deviceModel);
+                statusLabel.setText(
+                    "Loaded groups. User groups: "
+                        + groupSets.userGroups().size()
+                        + " Device groups: "
+                        + groupSets.deviceGroups().size());
+                splash.markComplete(
+                    "Classification complete. User groups: "
+                        + groupSets.userGroups().size()
+                        + ", Device groups: "
+                        + groupSets.deviceGroups().size());
+              } catch (Exception ex) {
+                statusLabel.setText("Failed to load groups.");
+                splash.markComplete("Classification failed. Review the error details and click OK to close.");
+                JOptionPane.showMessageDialog(
+                    null,
+                    "Could not load group list: " + ex.getMessage(),
+                    "Group Load Error",
+                    JOptionPane.ERROR_MESSAGE);
+              } finally {
+                long elapsedMs = runtime.stopProgressTimer();
+                statusLabel.setText(statusLabel.getText() + " | " + elapsedMs + " ms");
+                setActionControlsEnabled(
+//                  groupsButton,
+                    usersButton,
+                    devicesButton,
+                    userGroupMembersButton,
+                    deviceGroupMembersButton,
+                    syncGroupButton,
+                    rebootGroupButton,
+                    userGroupDropdown,
+                    deviceGroupDropdown,
+                    true);
+              }
+            }
+          }.execute();
+        });
   }
 
   private static GroupDropdownSets fetchAndClassifyGroupOptions(
       GuiRuntime runtime, GroupClassificationProgress progress) {
+    progress.onUpdate(new GroupClassificationUpdate("Authenticating with Microsoft Graph...", 0, 0));
+    verifyConfigAndAuthentication(runtime);
+    progress.onUpdate(new GroupClassificationUpdate("Authentication successful.", 0, 0));
     progress.onUpdate(new GroupClassificationUpdate("Loading groups from Microsoft Graph...", 0, 0));
     List<GroupOption> groups = fetchGroupOptions(runtime);
     progress.onUpdate(
@@ -644,6 +699,150 @@ public final class IntuneBulkGuiApp {
     boolean hasUsers = "user".equals(firstMemberType);
     boolean hasDevices = "device".equals(firstMemberType);
     return new GroupClassification(group, hasUsers, hasDevices);
+  }
+
+  private static void verifyConfigAndAuthentication(GuiRuntime runtime) {
+    // Force config resolution + token acquisition before group analysis starts.
+    runtime.graph().getV1PagedValues("/groups?$select=" + urlEncode("id") + "&$top=1", 1);
+  }
+
+  private static ConfigBootstrapState loadConfigBootstrapState() {
+    List<Path> candidates = resolveConfigPathsForGui();
+    if (candidates.isEmpty()) {
+      throw new IllegalStateException("No candidate path available for ibt.cfg.");
+    }
+
+    Path selected = null;
+    for (Path candidate : candidates) {
+      if (candidate != null && Files.isRegularFile(candidate)) {
+        selected = candidate;
+        break;
+      }
+    }
+    if (selected == null) {
+      selected = candidates.get(0);
+      ensureConfigFileExists(selected);
+    }
+
+    Map<String, String> values = parseConfigFile(selected);
+    return new ConfigBootstrapState(
+        selected,
+        values.getOrDefault("INTUNE_TENANT_ID", ""),
+        values.getOrDefault("INTUNE_CLIENT_ID", ""));
+  }
+
+  private static void ensureConfigFileExists(Path cfgPath) {
+    try {
+      Path parent = cfgPath.toAbsolutePath().normalize().getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      if (!Files.exists(cfgPath)) {
+        Files.writeString(cfgPath, DEFAULT_CFG_TEMPLATE);
+      }
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed creating ibt.cfg at " + cfgPath, e);
+    }
+  }
+
+  private static List<Path> resolveConfigPathsForGui() {
+    List<Path> candidates = new ArrayList<>();
+    String explicit = System.getenv("INTUNE_CONFIG_FILE");
+    if (explicit != null && !explicit.isBlank()) {
+      candidates.add(Path.of(explicit.trim()));
+      return candidates;
+    }
+
+    candidates.add(Path.of("ibt.cfg"));
+    Path classpathDir = firstClasspathEntryDirectory();
+    if (classpathDir != null) {
+      candidates.add(classpathDir.resolve("ibt.cfg"));
+      Path parent = classpathDir.getParent();
+      if (parent != null) {
+        candidates.add(parent.resolve("ibt.cfg"));
+      }
+    }
+    return candidates;
+  }
+
+  private static Path firstClasspathEntryDirectory() {
+    String classPath = System.getProperty("java.class.path");
+    if (classPath == null || classPath.isBlank()) {
+      return null;
+    }
+
+    StringTokenizer tok = new StringTokenizer(classPath, System.getProperty("path.separator", ";"));
+    while (tok.hasMoreTokens()) {
+      String entry = tok.nextToken();
+      if (entry == null || entry.isBlank()) {
+        continue;
+      }
+      Path p = Path.of(entry);
+      if (Files.isDirectory(p)) {
+        return p.toAbsolutePath().normalize();
+      }
+      Path parent = p.toAbsolutePath().normalize().getParent();
+      if (parent != null) {
+        return parent;
+      }
+    }
+    return null;
+  }
+
+  private static Map<String, String> parseConfigFile(Path cfgPath) {
+    Map<String, String> values = new HashMap<>();
+    try {
+      if (!Files.exists(cfgPath)) {
+        return values;
+      }
+      List<String> lines = Files.readAllLines(cfgPath);
+      for (String rawLine : lines) {
+        String line = rawLine == null ? "" : rawLine.trim();
+        if (line.isEmpty() || line.startsWith("#") || line.startsWith(";")) {
+          continue;
+        }
+        int eq = line.indexOf('=');
+        if (eq <= 0) {
+          continue;
+        }
+        String key = line.substring(0, eq).trim();
+        String val = line.substring(eq + 1).trim();
+        if (!key.isEmpty()) {
+          values.put(key, val);
+        }
+      }
+      return values;
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed reading config file: " + cfgPath, e);
+    }
+  }
+
+  private static void writeConfigValues(Path cfgPath, String tenantId, String clientId) {
+    Map<String, String> values = parseConfigFile(cfgPath);
+    values.put("INTUNE_AUTH_MODE", values.getOrDefault("INTUNE_AUTH_MODE", "interactive"));
+    values.put("INTUNE_REDIRECT_URI", values.getOrDefault("INTUNE_REDIRECT_URI", "http://localhost"));
+    values.put("INTUNE_TENANT_ID", tenantId);
+    values.put("INTUNE_CLIENT_ID", clientId);
+    String content =
+        String.join(
+                System.lineSeparator(),
+                "# intune-bulk-tools config template",
+                "# Environment variables override values from ibt.cfg.",
+                "",
+                "INTUNE_AUTH_MODE=" + values.get("INTUNE_AUTH_MODE"),
+                "INTUNE_TENANT_ID=" + values.get("INTUNE_TENANT_ID"),
+                "INTUNE_CLIENT_ID=" + values.get("INTUNE_CLIENT_ID"),
+                "INTUNE_REDIRECT_URI=" + values.get("INTUNE_REDIRECT_URI"))
+            + System.lineSeparator();
+    try {
+      Path parent = cfgPath.toAbsolutePath().normalize().getParent();
+      if (parent != null) {
+        Files.createDirectories(parent);
+      }
+      Files.writeString(cfgPath, content);
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed writing config file: " + cfgPath, e);
+    }
   }
 
   private static String firstGroupMemberType(GuiRuntime runtime, String groupId) {
@@ -1191,6 +1390,8 @@ public final class IntuneBulkGuiApp {
 
   private record GroupDropdownSets(List<GroupOption> userGroups, List<GroupOption> deviceGroups) {}
 
+  private record ConfigBootstrapState(Path cfgPath, String tenantId, String clientId) {}
+
   private record GroupClassificationUpdate(String message, int completed, int total) {}
 
   @FunctionalInterface
@@ -1199,28 +1400,59 @@ public final class IntuneBulkGuiApp {
   }
 
   private static final class GroupLoadingSplash {
+    private final JTextField tenantIdField;
+    private final JTextField clientIdField;
     private final JProgressBar progressBar;
     private final JTextArea activityArea;
+    private final JButton confirmButton;
+    private final JButton startButton;
     private final JButton okButton;
+    private boolean configSaved;
+    private ConfirmHandler confirmHandler;
+    private StartHandler startHandler;
+    private Runnable closeHandler;
 
-    private GroupLoadingSplash(JProgressBar progressBar, JTextArea activityArea, JButton okButton) {
+    private GroupLoadingSplash(
+        JTextField tenantIdField,
+        JTextField clientIdField,
+        JProgressBar progressBar,
+        JTextArea activityArea,
+        JButton confirmButton,
+        JButton startButton,
+        JButton okButton) {
+      this.tenantIdField = tenantIdField;
+      this.clientIdField = clientIdField;
       this.progressBar = progressBar;
       this.activityArea = activityArea;
+      this.confirmButton = confirmButton;
+      this.startButton = startButton;
       this.okButton = okButton;
+      this.configSaved = false;
     }
 
-    private static GroupLoadingSplash showFor(JLabel anchor) {
+    private static GroupLoadingSplash showFor(JLabel anchor, ConfigBootstrapState configState) {
       Window owner = SwingUtilities.getWindowAncestor(anchor);
       JDialog dialog = new JDialog(owner, "Loading and Classifying Groups", JDialog.ModalityType.MODELESS);
       dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
       dialog.setLayout(new BorderLayout(8, 8));
       dialog.setResizable(false);
       dialog.setAlwaysOnTop(true);
+      dialog.toFront();
+
+      JTextField tenantIdField = new JTextField(configState.tenantId(), 42);
+      JTextField clientIdField = new JTextField(configState.clientId(), 42);
+
+      JPanel configPanel = new JPanel(new GridLayout(0, 1, 0, 6));
+      configPanel.setBorder(BorderFactory.createTitledBorder("Authentication Setup"));
+      configPanel.add(new JLabel("INTUNE_TENANT_ID"));
+      configPanel.add(tenantIdField);
+      configPanel.add(new JLabel("INTUNE_CLIENT_ID"));
+      configPanel.add(clientIdField);
 
       JProgressBar progressBar = new JProgressBar();
-      progressBar.setIndeterminate(true);
+      progressBar.setIndeterminate(false);
       progressBar.setStringPainted(true);
-      progressBar.setString("Loading...");
+      progressBar.setString("Waiting...");
 
       JTextArea activityArea = new JTextArea(8, 60);
       activityArea.setEditable(false);
@@ -1228,27 +1460,103 @@ public final class IntuneBulkGuiApp {
       activityArea.setWrapStyleWord(true);
       activityArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
 
+      JButton confirmButton = new JButton("Confirm");
+      JButton startButton = new JButton("Authenticate and Continue");
+      startButton.setEnabled(false);
       JButton okButton = new JButton("OK");
       okButton.setEnabled(false);
 
+      JPanel top = new JPanel(new BorderLayout(8, 8));
+      top.add(configPanel, BorderLayout.NORTH);
+      top.add(progressBar, BorderLayout.SOUTH);
+
       JPanel content = new JPanel(new BorderLayout(8, 8));
       content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-      content.add(progressBar, BorderLayout.NORTH);
+      content.add(top, BorderLayout.NORTH);
       content.add(new JScrollPane(activityArea), BorderLayout.CENTER);
       JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+      buttons.add(confirmButton);
+      buttons.add(startButton);
       buttons.add(okButton);
       content.add(buttons, BorderLayout.SOUTH);
       dialog.setContentPane(content);
 
-      okButton.addActionListener(event -> dialog.dispose());
+      GroupLoadingSplash splash =
+          new GroupLoadingSplash(
+              tenantIdField,
+              clientIdField,
+              progressBar,
+              activityArea,
+              confirmButton,
+              startButton,
+              okButton);
+
+      confirmButton.addActionListener(
+          event -> {
+            if (splash.confirmHandler != null) {
+              splash.confirmHandler.onConfirm(tenantIdField.getText(), clientIdField.getText());
+            }
+          });
+      startButton.addActionListener(
+          event -> {
+            if (splash.startHandler != null) {
+              splash.startHandler.onStart();
+            }
+          });
+      okButton.addActionListener(
+          event -> {
+            if (splash.closeHandler != null) {
+              splash.closeHandler.run();
+            }
+            dialog.dispose();
+          });
 
       dialog.pack();
       dialog.setLocationRelativeTo(owner);
       dialog.setVisible(true);
 
-      GroupLoadingSplash splash = new GroupLoadingSplash(progressBar, activityArea, okButton);
-      splash.update(new GroupClassificationUpdate("Starting group load...", 0, 0));
+      splash.update(
+          new GroupClassificationUpdate(
+              "Review Tenant ID and Client ID, click Confirm, then Authenticate and Continue.",
+              0,
+              0));
       return splash;
+    }
+
+    private void setConfirmHandler(ConfirmHandler confirmHandler) {
+      this.confirmHandler = confirmHandler;
+    }
+
+    private void setStartHandler(StartHandler startHandler) {
+      this.startHandler = startHandler;
+    }
+
+    private void setCloseHandler(Runnable closeHandler) {
+      this.closeHandler = closeHandler;
+    }
+
+    private boolean isConfigSaved() {
+      return configSaved;
+    }
+
+    private void markConfigSaved(Path cfgPath) {
+      this.configSaved = true;
+      this.startButton.setEnabled(true);
+      this.confirmButton.setEnabled(false);
+      this.tenantIdField.setEnabled(false);
+      this.clientIdField.setEnabled(false);
+      update(
+          new GroupClassificationUpdate(
+              "Saved config to " + cfgPath.toAbsolutePath() + ". Click Authenticate and Continue.",
+              0,
+              0));
+    }
+
+    private void startWorkPhase() {
+      startButton.setEnabled(false);
+      confirmButton.setEnabled(false);
+      progressBar.setIndeterminate(true);
+      progressBar.setString("Working...");
     }
 
     private void update(GroupClassificationUpdate update) {
@@ -1282,6 +1590,16 @@ public final class IntuneBulkGuiApp {
         activityArea.append(message.trim() + System.lineSeparator());
         activityArea.setCaretPosition(activityArea.getDocument().getLength());
       }
+    }
+
+    @FunctionalInterface
+    private interface ConfirmHandler {
+      void onConfirm(String tenantId, String clientId);
+    }
+
+    @FunctionalInterface
+    private interface StartHandler {
+      void onStart();
     }
   }
 
