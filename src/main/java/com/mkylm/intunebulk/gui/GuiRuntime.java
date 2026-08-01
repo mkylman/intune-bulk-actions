@@ -14,7 +14,6 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import javax.swing.JLabel;
 import javax.swing.JTable;
 import javax.swing.JTextField;
 import javax.swing.RowFilter;
@@ -31,7 +30,6 @@ final class GuiRuntime {
   DefaultTableModel resultsModel;
   TableRowSorter<DefaultTableModel> resultsSorter;
   JTextField resultsFilterField;
-  private JLabel elapsedLabel;
   private long progressStartedAtMs;
   private final Map<String, CachedGroupDevices> groupDevicesCache = new HashMap<>();
   private List<String[]> usersRowsCache;
@@ -114,26 +112,12 @@ final class GuiRuntime {
     resultsSorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(query.trim())));
   }
 
-  void attachElapsedLabel(JLabel elapsedLabel) {
-    this.elapsedLabel = elapsedLabel;
-    if (this.elapsedLabel != null) {
-      this.elapsedLabel.setText("Elapsed: -- ms");
-    }
-  }
-
   void startProgressTimer() {
     progressStartedAtMs = System.currentTimeMillis();
-    if (elapsedLabel != null) {
-      elapsedLabel.setText("Elapsed: ...");
-    }
   }
 
   long stopProgressTimer() {
-    long elapsedMs = Math.max(0, System.currentTimeMillis() - progressStartedAtMs);
-    if (elapsedLabel != null) {
-      elapsedLabel.setText("Elapsed: " + elapsedMs + " ms");
-    }
-    return elapsedMs;
+    return Math.max(0, System.currentTimeMillis() - progressStartedAtMs);
   }
 
   private GroupDeviceResolver groupResolver() {

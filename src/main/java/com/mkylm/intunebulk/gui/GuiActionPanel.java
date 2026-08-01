@@ -2,7 +2,6 @@ package com.mkylm.intunebulk.gui;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import javax.swing.BorderFactory;
@@ -18,24 +17,32 @@ final class GuiActionPanel {
 
     JButton usersButton = new JButton("Users");
     JButton devicesButton = new JButton("Devices");
-    JButton groupMembersButton = new JButton("Group Members");
+    JButton userGroupMembersButton = new JButton("User Group Members");
+    JButton deviceGroupMembersButton = new JButton("Device Group Members");
     JButton syncGroupButton = new JButton("Sync Group");
     JButton rebootGroupButton = new JButton("Reboot Group");
     JButton removePrimaryUserGroupButton = new JButton("Remove Primary User Group");
-    JComboBox<GroupOption> groupDropdown = new JComboBox<>();
-    groupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
-    groupDropdown.setEnabled(false);
+    JComboBox<GroupOption> userGroupDropdown = new JComboBox<>();
+    userGroupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
+    userGroupDropdown.setEnabled(false);
+    JComboBox<GroupOption> deviceGroupDropdown = new JComboBox<>();
+    deviceGroupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
+    deviceGroupDropdown.setEnabled(false);
     JLabel statusLabel = new JLabel("Ready.");
-    JLabel elapsedLabel = new JLabel("Elapsed: -- ms");
-    elapsedLabel.setPreferredSize(new Dimension(140, elapsedLabel.getPreferredSize().height));
 
     JPanel queryButtonsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     queryButtonsRow.add(usersButton);
     queryButtonsRow.add(devicesButton);
 
-    JPanel groupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    groupSelectionRow.add(groupDropdown);
-    groupSelectionRow.add(groupMembersButton);
+    JPanel userGroupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    userGroupSelectionRow.add(new JLabel("User Groups:"));
+    userGroupSelectionRow.add(userGroupDropdown);
+    userGroupSelectionRow.add(userGroupMembersButton);
+
+    JPanel deviceGroupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
+    deviceGroupSelectionRow.add(new JLabel("Device Groups:"));
+    deviceGroupSelectionRow.add(deviceGroupDropdown);
+    deviceGroupSelectionRow.add(deviceGroupMembersButton);
 
     JPanel syncGroupRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     syncGroupRow.add(syncGroupButton);
@@ -52,63 +59,65 @@ final class GuiActionPanel {
     destructiveActionsRow.add(rebootGroupButton);
     destructiveActionsRow.add(removePrimaryUserGroupButton);
 
-    JPanel rows = new JPanel(new GridLayout(4, 1, 0, 4));
+    JPanel rows = new JPanel(new GridLayout(5, 1, 0, 4));
     rows.add(queryButtonsRow);
-    rows.add(groupSelectionRow);
+    rows.add(userGroupSelectionRow);
+    rows.add(deviceGroupSelectionRow);
     rows.add(syncGroupRow);
     rows.add(destructiveActionsRow);
     panel.add(rows, BorderLayout.CENTER);
-    JPanel statusRow = new JPanel(new BorderLayout(8, 0));
-    statusRow.add(statusLabel, BorderLayout.CENTER);
-    statusRow.add(elapsedLabel, BorderLayout.EAST);
-    panel.add(statusRow, BorderLayout.SOUTH);
+    panel.add(statusLabel, BorderLayout.SOUTH);
 
     return new Controls(
         panel,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
         removePrimaryUserGroupButton,
-        groupDropdown,
-        statusLabel,
-        elapsedLabel);
+        userGroupDropdown,
+        deviceGroupDropdown,
+        statusLabel);
   }
 
   static final class Controls {
     final JPanel panel;
     final JButton usersButton;
     final JButton devicesButton;
-    final JButton groupMembersButton;
+    final JButton userGroupMembersButton;
+    final JButton deviceGroupMembersButton;
     final JButton syncGroupButton;
     final JButton rebootGroupButton;
     final JButton removePrimaryUserGroupButton;
-    final JComboBox<GroupOption> groupDropdown;
+    final JComboBox<GroupOption> userGroupDropdown;
+    final JComboBox<GroupOption> deviceGroupDropdown;
     final JLabel statusLabel;
-    final JLabel elapsedLabel;
 
     Controls(
         JPanel panel,
         JButton usersButton,
         JButton devicesButton,
-        JButton groupMembersButton,
+        JButton userGroupMembersButton,
+        JButton deviceGroupMembersButton,
         JButton syncGroupButton,
         JButton rebootGroupButton,
         JButton removePrimaryUserGroupButton,
-        JComboBox<GroupOption> groupDropdown,
-        JLabel statusLabel,
-        JLabel elapsedLabel) {
+        JComboBox<GroupOption> userGroupDropdown,
+        JComboBox<GroupOption> deviceGroupDropdown,
+        JLabel statusLabel) {
       this.panel = panel;
       this.usersButton = usersButton;
       this.devicesButton = devicesButton;
-      this.groupMembersButton = groupMembersButton;
+      this.userGroupMembersButton = userGroupMembersButton;
+      this.deviceGroupMembersButton = deviceGroupMembersButton;
       this.syncGroupButton = syncGroupButton;
       this.rebootGroupButton = rebootGroupButton;
       this.removePrimaryUserGroupButton = removePrimaryUserGroupButton;
-      this.groupDropdown = groupDropdown;
+      this.userGroupDropdown = userGroupDropdown;
+      this.deviceGroupDropdown = deviceGroupDropdown;
       this.statusLabel = statusLabel;
-      this.elapsedLabel = elapsedLabel;
     }
   }
 

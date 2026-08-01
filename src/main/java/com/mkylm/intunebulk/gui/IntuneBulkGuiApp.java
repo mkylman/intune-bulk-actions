@@ -27,18 +27,24 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
 import javax.swing.DefaultComboBoxModel;
+import javax.swing.JDialog;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JTextArea;
@@ -127,13 +133,14 @@ public final class IntuneBulkGuiApp {
     GuiActionPanel.Controls controls = GuiActionPanel.build();
     JButton usersButton = controls.usersButton;
     JButton devicesButton = controls.devicesButton;
-    JButton groupMembersButton = controls.groupMembersButton;
+    JButton userGroupMembersButton = controls.userGroupMembersButton;
+    JButton deviceGroupMembersButton = controls.deviceGroupMembersButton;
     JButton syncGroupButton = controls.syncGroupButton;
     JButton rebootGroupButton = controls.rebootGroupButton;
     JButton removePrimaryUserGroupButton = controls.removePrimaryUserGroupButton;
-    JComboBox<GroupOption> groupDropdown = controls.groupDropdown;
+    JComboBox<GroupOption> userGroupDropdown = controls.userGroupDropdown;
+    JComboBox<GroupOption> deviceGroupDropdown = controls.deviceGroupDropdown;
     JLabel statusLabel = controls.statusLabel;
-    runtime.attachElapsedLabel(controls.elapsedLabel);
 
     usersButton.addActionListener(
         event ->
@@ -143,10 +150,12 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
+                userGroupDropdown,
+                deviceGroupDropdown));
     devicesButton.addActionListener(
         event ->
             runDevices(
@@ -155,11 +164,27 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
-    groupMembersButton.addActionListener(
+                userGroupDropdown,
+                deviceGroupDropdown));
+    userGroupMembersButton.addActionListener(
+        event ->
+            runUserGroupMembers(
+                runtime,
+                statusLabel,
+//              groupsButton,
+                usersButton,
+                devicesButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
+                syncGroupButton,
+                rebootGroupButton,
+                userGroupDropdown,
+                deviceGroupDropdown));
+    deviceGroupMembersButton.addActionListener(
         event ->
             runGroupDevices(
                 runtime,
@@ -167,10 +192,12 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
+                userGroupDropdown,
+                deviceGroupDropdown));
     syncGroupButton.addActionListener(
         event ->
             runSyncGroup(
@@ -179,10 +206,12 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
+                userGroupDropdown,
+                deviceGroupDropdown));
     rebootGroupButton.addActionListener(
         event ->
             runRebootGroup(
@@ -191,10 +220,12 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
+                userGroupDropdown,
+                deviceGroupDropdown));
     removePrimaryUserGroupButton.addActionListener(
         event ->
             runRemovePrimaryUserGroup(
@@ -203,10 +234,12 @@ public final class IntuneBulkGuiApp {
 //              groupsButton,
                 usersButton,
                 devicesButton,
-                groupMembersButton,
+                userGroupMembersButton,
+                deviceGroupMembersButton,
                 syncGroupButton,
                 rebootGroupButton,
-                groupDropdown));
+                userGroupDropdown,
+                deviceGroupDropdown));
 
     loadGroupsIntoDropdown(
         runtime,
@@ -214,10 +247,12 @@ public final class IntuneBulkGuiApp {
 //        groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown);
+        userGroupDropdown,
+        deviceGroupDropdown);
     return controls.panel;
   }
 
@@ -356,20 +391,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runQuery(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         "Loading groups...",
         new String[] {"Display Name", "Group ID"},
         () -> {
@@ -391,20 +430,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runQuery(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         "Loading users...",
         new String[] {"Display Name", "UPN", "User ID"},
         runtime::loadUsersRows,
@@ -417,20 +460,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runQuery(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         "Loading devices...",
         new String[] {"Device Name", "Serial", "Managed Device ID"},
         runtime::loadDevicesRows,
@@ -443,40 +490,72 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     setActionControlsEnabled(
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         false);
-    statusLabel.setText("Loading group names...");
+    statusLabel.setText("Loading and classifying groups...");
     runtime.startProgressTimer();
+    GroupLoadingSplash splash = GroupLoadingSplash.showFor(statusLabel);
 
-    new SwingWorker<List<GroupOption>, Void>() {
+    new SwingWorker<GroupDropdownSets, Void>() {
       @Override
-      protected List<GroupOption> doInBackground() {
-        return fetchGroupOptions(runtime);
+      protected GroupDropdownSets doInBackground() {
+        return fetchAndClassifyGroupOptions(
+            runtime,
+            update ->
+                SwingUtilities.invokeLater(
+                    () -> {
+                      if (splash != null) {
+                        splash.update(update);
+                      }
+                    }));
       }
 
       @Override
       protected void done() {
         try {
-          List<GroupOption> groups = get();
-          DefaultComboBoxModel<GroupOption> model = new DefaultComboBoxModel<>();
-          for (GroupOption group : groups) {
-            model.addElement(group);
+          GroupDropdownSets groupSets = get();
+          DefaultComboBoxModel<GroupOption> userModel = new DefaultComboBoxModel<>();
+          DefaultComboBoxModel<GroupOption> deviceModel = new DefaultComboBoxModel<>();
+          for (GroupOption group : groupSets.userGroups()) {
+            userModel.addElement(group);
           }
-          groupDropdown.setModel(model);
-          statusLabel.setText("Loaded groups for sync. Count: " + groups.size());
+          for (GroupOption group : groupSets.deviceGroups()) {
+            deviceModel.addElement(group);
+          }
+          userGroupDropdown.setModel(userModel);
+          deviceGroupDropdown.setModel(deviceModel);
+          statusLabel.setText(
+              "Loaded groups. User groups: "
+                  + groupSets.userGroups().size()
+                  + " Device groups: "
+                  + groupSets.deviceGroups().size());
+          if (splash != null) {
+            splash.markComplete(
+                "Classification complete. User groups: "
+                    + groupSets.userGroups().size()
+                    + ", Device groups: "
+                    + groupSets.deviceGroups().size());
+          }
         } catch (Exception ex) {
           statusLabel.setText("Failed to load groups.");
+          if (splash != null) {
+            splash.markComplete("Classification failed. Review the error details and click OK to close.");
+          }
           JOptionPane.showMessageDialog(
               null,
               "Could not load group list: " + ex.getMessage(),
@@ -489,14 +568,110 @@ public final class IntuneBulkGuiApp {
 //            groupsButton,
               usersButton,
               devicesButton,
-              groupMembersButton,
+              userGroupMembersButton,
+              deviceGroupMembersButton,
               syncGroupButton,
               rebootGroupButton,
-              groupDropdown,
+              userGroupDropdown,
+              deviceGroupDropdown,
               true);
         }
       }
     }.execute();
+  }
+
+  private static GroupDropdownSets fetchAndClassifyGroupOptions(
+      GuiRuntime runtime, GroupClassificationProgress progress) {
+    progress.onUpdate(new GroupClassificationUpdate("Loading groups from Microsoft Graph...", 0, 0));
+    List<GroupOption> groups = fetchGroupOptions(runtime);
+    progress.onUpdate(
+        new GroupClassificationUpdate(
+            "Loaded " + groups.size() + " groups. Classifying member types...", 0, groups.size()));
+    if (groups.isEmpty()) {
+      return new GroupDropdownSets(List.of(), List.of());
+    }
+
+    int workerCount = Math.max(2, Math.min(8, groups.size()));
+    ExecutorService pool = Executors.newFixedThreadPool(workerCount);
+    try {
+      List<Callable<GroupClassification>> tasks = new ArrayList<>();
+      for (GroupOption group : groups) {
+        tasks.add(() -> classifyGroup(runtime, group));
+      }
+
+      List<Future<GroupClassification>> futures = pool.invokeAll(tasks);
+      List<GroupOption> userGroups = new ArrayList<>();
+      List<GroupOption> deviceGroups = new ArrayList<>();
+      int completed = 0;
+      for (Future<GroupClassification> future : futures) {
+        GroupClassification classification = future.get();
+        if (classification.hasUsers()) {
+          userGroups.add(classification.group());
+        }
+        if (classification.hasDevices()) {
+          deviceGroups.add(classification.group());
+        }
+        completed++;
+        progress.onUpdate(
+            new GroupClassificationUpdate(
+                "Scanned: " + classification.group().name(),
+                completed,
+                groups.size()));
+      }
+      userGroups.sort(Comparator.comparing(GroupOption::name, String.CASE_INSENSITIVE_ORDER));
+      deviceGroups.sort(Comparator.comparing(GroupOption::name, String.CASE_INSENSITIVE_ORDER));
+      progress.onUpdate(
+          new GroupClassificationUpdate(
+              "Classification complete. User groups: "
+                  + userGroups.size()
+                  + ", Device groups: "
+                  + deviceGroups.size(),
+              groups.size(),
+              groups.size()));
+      return new GroupDropdownSets(userGroups, deviceGroups);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException("Interrupted while classifying groups.", e);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to classify groups: " + e.getMessage(), e);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  private static GroupClassification classifyGroup(GuiRuntime runtime, GroupOption group) {
+    String firstMemberType = firstGroupMemberType(runtime, group.id());
+    boolean hasUsers = "user".equals(firstMemberType);
+    boolean hasDevices = "device".equals(firstMemberType);
+    return new GroupClassification(group, hasUsers, hasDevices);
+  }
+
+  private static String firstGroupMemberType(GuiRuntime runtime, String groupId) {
+    String path = "/groups/" + groupId + "/transitiveMembers?$top=1";
+    List<JsonNode> members = runtime.graph().getV1PagedValues(path, 1);
+    if (members.isEmpty()) {
+      return "none";
+    }
+
+    JsonNode member = members.get(0);
+    String odataType = text(member, "@odata.type");
+    if (!odataType.isBlank()) {
+      String lowered = odataType.toLowerCase(java.util.Locale.ROOT);
+      if (lowered.contains("microsoft.graph.user")) {
+        return "user";
+      }
+      if (lowered.contains("microsoft.graph.device")) {
+        return "device";
+      }
+    }
+
+    if (member.has("userPrincipalName")) {
+      return "user";
+    }
+    if (member.has("deviceId")) {
+      return "device";
+    }
+    return "other";
   }
 
   private static List<GroupOption> fetchGroupOptions(GuiRuntime runtime) {
@@ -520,20 +695,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runGroupAction(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         ActionType.SYNC,
         "Sync Group",
         "SYNC");
@@ -545,20 +724,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runGroupAction(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         ActionType.REBOOT,
         "Reboot Group",
         "REBOOT");
@@ -570,20 +753,24 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
     runGroupAction(
         runtime,
         statusLabel,
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         ActionType.REMOVE_PRIMARY_USER,
         "Remove Primary User Group",
         "REMOVE_PRIMARY_USER");
@@ -595,16 +782,22 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown,
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown,
       ActionType actionType,
       String actionTitle,
       String actionLabel) {
-    GroupOption selected = (GroupOption) groupDropdown.getSelectedItem();
+    GroupOption selected = (GroupOption) deviceGroupDropdown.getSelectedItem();
     if (selected == null) {
-      JOptionPane.showMessageDialog(null, "Select a group first.", "No Group Selected", JOptionPane.WARNING_MESSAGE);
+      JOptionPane.showMessageDialog(
+          null,
+          "Select a device group first.",
+          "No Device Group Selected",
+          JOptionPane.WARNING_MESSAGE);
       return;
     }
 
@@ -623,10 +816,12 @@ public final class IntuneBulkGuiApp {
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         false);
     statusLabel.setText("Resolving devices for " + selected.name() + "...");
     runtime.startProgressTimer();
@@ -680,10 +875,12 @@ public final class IntuneBulkGuiApp {
 //            groupsButton,
               usersButton,
               devicesButton,
-              groupMembersButton,
+              userGroupMembersButton,
+              deviceGroupMembersButton,
               syncGroupButton,
               rebootGroupButton,
-              groupDropdown,
+              userGroupDropdown,
+              deviceGroupDropdown,
               true);
         }
       }
@@ -696,10 +893,12 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown,
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown,
       String loadingMessage,
       String[] columns,
       QueryRunner queryRunner,
@@ -708,10 +907,12 @@ public final class IntuneBulkGuiApp {
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         false);
     statusLabel.setText(loadingMessage);
     runtime.startProgressTimer();
@@ -746,14 +947,68 @@ public final class IntuneBulkGuiApp {
 //            groupsButton,
               usersButton,
               devicesButton,
-              groupMembersButton,
+              userGroupMembersButton,
+              deviceGroupMembersButton,
               syncGroupButton,
               rebootGroupButton,
-              groupDropdown,
+              userGroupDropdown,
+              deviceGroupDropdown,
               true);
         }
       }
     }.execute();
+  }
+
+  private static void runUserGroupMembers(
+      GuiRuntime runtime,
+      JLabel statusLabel,
+      JButton usersButton,
+      JButton devicesButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
+      JButton syncGroupButton,
+      JButton rebootGroupButton,
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
+    GroupOption selected = (GroupOption) userGroupDropdown.getSelectedItem();
+    if (selected == null) {
+      JOptionPane.showMessageDialog(
+          null,
+          "Select a user group first.",
+          "No User Group Selected",
+          JOptionPane.WARNING_MESSAGE);
+      return;
+    }
+
+    runQuery(
+        runtime,
+        statusLabel,
+        usersButton,
+        devicesButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
+        syncGroupButton,
+        rebootGroupButton,
+        userGroupDropdown,
+        deviceGroupDropdown,
+        "Resolving user members for " + selected.name() + "...",
+        new String[] {"Display Name", "UPN", "User ID"},
+        () -> {
+          String path =
+              "/groups/"
+                  + selected.id()
+                  + "/transitiveMembers/microsoft.graph.user?$select="
+                  + urlEncode("id,displayName,userPrincipalName");
+          List<JsonNode> rows = runtime.graph().getV1PagedValues(path);
+          List<String[]> tableRows = new ArrayList<>();
+          for (JsonNode row : rows) {
+            tableRows.add(
+                new String[] {text(row, "displayName"), text(row, "userPrincipalName"), text(row, "id")});
+          }
+          sortRowsByColumn(tableRows, 0);
+          return tableRows;
+        },
+        "Loaded users for group " + selected.name() + ".");
   }
 
   private static void runGroupDevices(
@@ -762,13 +1017,19 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown) {
-    GroupOption selected = (GroupOption) groupDropdown.getSelectedItem();
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown) {
+    GroupOption selected = (GroupOption) deviceGroupDropdown.getSelectedItem();
     if (selected == null) {
-      JOptionPane.showMessageDialog(null, "Select a group first.", "No Group Selected", JOptionPane.WARNING_MESSAGE);
+      JOptionPane.showMessageDialog(
+          null,
+          "Select a device group first.",
+          "No Device Group Selected",
+          JOptionPane.WARNING_MESSAGE);
       return;
     }
 
@@ -778,10 +1039,12 @@ public final class IntuneBulkGuiApp {
 //      groupsButton,
         usersButton,
         devicesButton,
-        groupMembersButton,
+        userGroupMembersButton,
+        deviceGroupMembersButton,
         syncGroupButton,
         rebootGroupButton,
-        groupDropdown,
+        userGroupDropdown,
+        deviceGroupDropdown,
         "Resolving group devices for " + selected.name() + "...",
         new String[] {"Device Name", "Serial Number", "Device Primary User"},
         () -> {
@@ -843,18 +1106,22 @@ public final class IntuneBulkGuiApp {
 //    JButton groupsButton,
       JButton usersButton,
       JButton devicesButton,
-      JButton groupMembersButton,
+      JButton userGroupMembersButton,
+      JButton deviceGroupMembersButton,
       JButton syncGroupButton,
       JButton rebootGroupButton,
-      JComboBox<GroupOption> groupDropdown,
+      JComboBox<GroupOption> userGroupDropdown,
+      JComboBox<GroupOption> deviceGroupDropdown,
       boolean enabled) {
 //  groupsButton.setEnabled(enabled);
     usersButton.setEnabled(enabled);
     devicesButton.setEnabled(enabled);
-    groupMembersButton.setEnabled(enabled);
+    userGroupMembersButton.setEnabled(enabled);
+    deviceGroupMembersButton.setEnabled(enabled);
     syncGroupButton.setEnabled(enabled);
     rebootGroupButton.setEnabled(enabled);
-    groupDropdown.setEnabled(enabled);
+    userGroupDropdown.setEnabled(enabled);
+    deviceGroupDropdown.setEnabled(enabled);
   }
 
   private static void sortRowsByColumn(List<String[]> rows, int columnIndex) {
@@ -918,6 +1185,104 @@ public final class IntuneBulkGuiApp {
   @FunctionalInterface
   private interface QueryRunner {
     List<String[]> run() throws Exception;
+  }
+
+  private record GroupClassification(GroupOption group, boolean hasUsers, boolean hasDevices) {}
+
+  private record GroupDropdownSets(List<GroupOption> userGroups, List<GroupOption> deviceGroups) {}
+
+  private record GroupClassificationUpdate(String message, int completed, int total) {}
+
+  @FunctionalInterface
+  private interface GroupClassificationProgress {
+    void onUpdate(GroupClassificationUpdate update);
+  }
+
+  private static final class GroupLoadingSplash {
+    private final JProgressBar progressBar;
+    private final JTextArea activityArea;
+    private final JButton okButton;
+
+    private GroupLoadingSplash(JProgressBar progressBar, JTextArea activityArea, JButton okButton) {
+      this.progressBar = progressBar;
+      this.activityArea = activityArea;
+      this.okButton = okButton;
+    }
+
+    private static GroupLoadingSplash showFor(JLabel anchor) {
+      Window owner = SwingUtilities.getWindowAncestor(anchor);
+      JDialog dialog = new JDialog(owner, "Loading and Classifying Groups", JDialog.ModalityType.MODELESS);
+      dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
+      dialog.setLayout(new BorderLayout(8, 8));
+      dialog.setResizable(false);
+      dialog.setAlwaysOnTop(true);
+
+      JProgressBar progressBar = new JProgressBar();
+      progressBar.setIndeterminate(true);
+      progressBar.setStringPainted(true);
+      progressBar.setString("Loading...");
+
+      JTextArea activityArea = new JTextArea(8, 60);
+      activityArea.setEditable(false);
+      activityArea.setLineWrap(true);
+      activityArea.setWrapStyleWord(true);
+      activityArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+
+      JButton okButton = new JButton("OK");
+      okButton.setEnabled(false);
+
+      JPanel content = new JPanel(new BorderLayout(8, 8));
+      content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+      content.add(progressBar, BorderLayout.NORTH);
+      content.add(new JScrollPane(activityArea), BorderLayout.CENTER);
+      JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+      buttons.add(okButton);
+      content.add(buttons, BorderLayout.SOUTH);
+      dialog.setContentPane(content);
+
+      okButton.addActionListener(event -> dialog.dispose());
+
+      dialog.pack();
+      dialog.setLocationRelativeTo(owner);
+      dialog.setVisible(true);
+
+      GroupLoadingSplash splash = new GroupLoadingSplash(progressBar, activityArea, okButton);
+      splash.update(new GroupClassificationUpdate("Starting group load...", 0, 0));
+      return splash;
+    }
+
+    private void update(GroupClassificationUpdate update) {
+      if (update == null) {
+        return;
+      }
+
+      if (update.total() > 0) {
+        progressBar.setIndeterminate(false);
+        progressBar.setMaximum(update.total());
+        progressBar.setValue(Math.max(0, Math.min(update.completed(), update.total())));
+        progressBar.setString(update.completed() + " / " + update.total());
+      } else {
+        progressBar.setIndeterminate(true);
+        progressBar.setString("Loading...");
+      }
+
+      String line = update.message() == null ? "" : update.message().trim();
+      if (!line.isEmpty()) {
+        activityArea.append(line + System.lineSeparator());
+        activityArea.setCaretPosition(activityArea.getDocument().getLength());
+      }
+    }
+
+    private void markComplete(String message) {
+      progressBar.setIndeterminate(false);
+      progressBar.setString("Complete");
+      progressBar.setValue(progressBar.getMaximum());
+      okButton.setEnabled(true);
+      if (message != null && !message.isBlank()) {
+        activityArea.append(message.trim() + System.lineSeparator());
+        activityArea.setCaretPosition(activityArea.getDocument().getLength());
+      }
+    }
   }
 
   private IntuneBulkGuiApp() {}

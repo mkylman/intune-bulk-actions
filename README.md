@@ -15,11 +15,13 @@ Java tool for performing bulk actions on Intune-enrolled devices via Microsoft G
 - Default no-args startup now launches GUI mode (instead of shell).
 - GUI layout updates:
   - query row now uses `Users` + `Devices` (Groups button removed)
-  - group row now uses `Group Members`
-  - dedicated action rows for `Sync Group`, then `Reboot Group` + `Remove Primary User Group`
+  - split group selectors into `User Groups` + `User Group Members` and `Device Groups` + `Device Group Members`
+  - dropdowns are filtered by inferred member type during initial load/classification
+  - dedicated action rows for `Sync Group`, then `Reboot Group` + `Remove Primary User Group` (device-group scoped)
   - `Reboot Group` is highlighted yellow; `Remove Primary User Group` is highlighted red
 - GUI now includes a result search box (case-insensitive filter) and `Export CSV`.
-- GUI now shows an elapsed timer next to status/progress text while queries/actions are running.
+- GUI status now includes elapsed time in milliseconds after operations (e.g., `| 1843 ms`).
+- Initial group loading/classification now shows an always-on-top splash dialog with progress/activity text and an `OK` close button.
 - Group device resolution is now faster due to parallel managed-device lookup in `GroupDeviceResolver`.
 - GUI reuses resolved group devices with a short in-session cache for repeated actions.
 - GUI now caches Users and Devices query results in-memory for repeated button clicks within a session.
@@ -111,9 +113,11 @@ Inside `shell`:
 ## GUI actions
 Inside `gui`:
 - Query buttons: `Users`, `Devices`
-- Group selector actions: `Group Members`, `Sync Group`, `Reboot Group`, `Remove Primary User Group`
+- User group selector: `User Groups` + `User Group Members`
+- Device group selector: `Device Groups` + `Device Group Members`
+- Group actions (`Sync Group`, `Reboot Group`, `Remove Primary User Group`) run against the selected device group.
 - Query results support live filtering and CSV export.
-- Progress/status area includes an elapsed timer while tasks are running.
+- Query/action completion messages include elapsed milliseconds (`| ### ms`).
 - Actions execute against all resolvable managed devices in the selected group (with confirmation prompts for mutating operations).
 
 ## Architecture
