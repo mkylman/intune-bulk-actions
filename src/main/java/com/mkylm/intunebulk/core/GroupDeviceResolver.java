@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.mkylm.intunebulk.graph.GraphClient;
 import com.mkylm.intunebulk.graph.GraphException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CompletionService;
 import java.util.concurrent.ExecutionException;
@@ -15,9 +17,12 @@ import java.util.concurrent.Executors;
 /**
  * Resolves devices from an Azure AD group to Intune managedDevice IDs.
  *
- * Design:
- *  - Fetch AAD devices: /groups/{id}/transitiveMembers/microsoft.graph.device
- *  - Map to managedDevice: /deviceManagement/managedDevices?$filter=azureADDeviceId eq '{deviceId}'
+ * <p>Design:
+ * <ul>
+ *   <li>Fetch AAD devices: {@code /groups/{id}/transitiveMembers/microsoft.graph.device}
+ *   <li>Map via a session-wide managed-device index keyed by {@code azureADDeviceId}
+ *   <li>Fall back to per-device Intune {@code $filter} lookups if the index cannot be built
+ * </ul>
  */
 public final class GroupDeviceResolver {
   private static final int DEFAULT_LOOKUP_CONCURRENCY = 8;
@@ -32,6 +37,8 @@ public final class GroupDeviceResolver {
 
   private final GraphClient graph;
   private final int lookupConcurrency;
+  private volatile Map<String, DeviceRef> managedDeviceIndex;
+  private volatile boolean managedDeviceIndexLoadFailed;
 
   public GroupDeviceResolver(GraphClient graph) {
     this(graph, DEFAULT_LOOKUP_CONCURRENCY);
@@ -51,7 +58,6 @@ public final class GroupDeviceResolver {
       List<DeviceRef> out = new ArrayList<>();
 
       // 1) Read Entra group membership (transitive) as directory device objects.
-      // GET /groups/{groupId}/transitiveMembers/microsoft.graph.device?$select=id,deviceId,displayName
       String membersPath =
           "/groups/"
               + groupId
@@ -66,9 +72,13 @@ public final class GroupDeviceResolver {
         progressListener.onProgress(new ProgressSnapshot(0, 0, 0, 0, null));
       }
 
-      // 2) Bridge each Entra device object to Intune managedDevice via azureADDeviceId.
-      // We resolve these lookups in parallel with a bounded pool to reduce end-to-end latency.
-      List<DeviceRef> resolved = resolveManagedDevicesInParallel(aadDevices);
+      // 2) Bridge each Entra device to Intune via local index (or per-device lookup fallback).
+      Map<String, DeviceRef> index = ensureManagedDeviceIndex();
+      List<DeviceRef> resolved =
+          index != null
+              ? resolveManagedDevicesFromIndex(aadDevices, index)
+              : resolveManagedDevicesInParallel(aadDevices);
+
       for (DeviceRef deviceRef : resolved) {
         out.add(deviceRef);
         if (deviceRef.skipped()) {
@@ -86,6 +96,107 @@ public final class GroupDeviceResolver {
     } catch (Exception e) {
       throw new RuntimeException("Failed to resolve group devices: " + e.getMessage(), e);
     }
+  }
+
+  private Map<String, DeviceRef> ensureManagedDeviceIndex() {
+    Map<String, DeviceRef> existing = managedDeviceIndex;
+    if (existing != null) {
+      return existing;
+    }
+    if (managedDeviceIndexLoadFailed) {
+      return null;
+    }
+
+    synchronized (this) {
+      if (managedDeviceIndex != null) {
+        return managedDeviceIndex;
+      }
+      if (managedDeviceIndexLoadFailed) {
+        return null;
+      }
+      try {
+        managedDeviceIndex = buildManagedDeviceIndex();
+        return managedDeviceIndex;
+      } catch (Exception e) {
+        managedDeviceIndexLoadFailed = true;
+        System.err.println(
+            "[GroupDeviceResolver] Failed to build managed-device index ("
+                + e.getMessage()
+                + "); falling back to per-device lookups.");
+        return null;
+      }
+    }
+  }
+
+  private Map<String, DeviceRef> buildManagedDeviceIndex() {
+    String path =
+        "/deviceManagement/managedDevices?$select="
+            + urlEncode("id,deviceName,serialNumber,userPrincipalName,azureADDeviceId");
+    List<JsonNode> managedDevices = graph.getV1PagedValues(path);
+    Map<String, DeviceRef> index = new HashMap<>();
+    for (JsonNode md : managedDevices) {
+      String azureAdDeviceId = text(md, "azureADDeviceId");
+      if (azureAdDeviceId == null || azureAdDeviceId.isBlank()) {
+        continue;
+      }
+      if (index.containsKey(azureAdDeviceId)) {
+        continue; // Keep first match for duplicates.
+      }
+      String managedDeviceId = text(md, "id");
+      if (managedDeviceId == null || managedDeviceId.isBlank()) {
+        continue;
+      }
+      index.put(
+          azureAdDeviceId,
+          DeviceRef.ofManagedDevice(
+              managedDeviceId,
+              azureAdDeviceId,
+              text(md, "deviceName"),
+              text(md, "serialNumber"),
+              text(md, "userPrincipalName")));
+    }
+    return Map.copyOf(index);
+  }
+
+  private List<DeviceRef> resolveManagedDevicesFromIndex(
+      List<JsonNode> aadDevices, Map<String, DeviceRef> index) {
+    if (aadDevices == null || aadDevices.isEmpty()) {
+      return List.of();
+    }
+
+    List<DeviceRef> result = new ArrayList<>(aadDevices.size());
+    for (JsonNode aad : aadDevices) {
+      String azureAdDeviceId = text(aad, "deviceId");
+      String displayName = text(aad, "displayName");
+
+      if (azureAdDeviceId == null || azureAdDeviceId.isBlank()) {
+        result.add(DeviceRef.skipped(null, displayName, "AAD deviceId missing"));
+        continue;
+      }
+
+      DeviceRef indexed = index.get(azureAdDeviceId);
+      if (indexed == null) {
+        result.add(
+            DeviceRef.skipped(
+                azureAdDeviceId, displayName, "Not enrolled in Intune (no managedDevice match)"));
+        continue;
+      }
+
+      // Prefer AAD display name when Intune deviceName is blank.
+      String deviceName = firstNonBlank(indexed.displayName(), displayName);
+      if (Objects.equals(deviceName, indexed.displayName())) {
+        result.add(indexed);
+      } else {
+        result.add(
+            DeviceRef.ofManagedDevice(
+                indexed.managedDeviceId(),
+                indexed.azureAdDeviceId(),
+                deviceName,
+                indexed.serialNumber(),
+                indexed.primaryUser()));
+      }
+    }
+    return result;
   }
 
   private static void emitProgress(
@@ -136,16 +247,13 @@ public final class GroupDeviceResolver {
   }
 
   private DeviceRef resolveManagedDeviceRef(JsonNode aad) {
-    String azureAdDeviceId = text(aad, "deviceId"); // GUID string
+    String azureAdDeviceId = text(aad, "deviceId");
     String displayName = text(aad, "displayName");
 
     if (azureAdDeviceId == null || azureAdDeviceId.isBlank()) {
-      // Membership entry exists, but lacks the deviceId needed for Intune lookup.
       return DeviceRef.skipped(null, displayName, "AAD deviceId missing");
     }
 
-    // Query Intune managedDevices for the corresponding Entra device.
-    // NOTE: Not paged because match cardinality should be tiny (normally 0 or 1).
     String mdPath =
         "/deviceManagement/managedDevices"
             + "?$filter="
@@ -156,12 +264,10 @@ public final class GroupDeviceResolver {
     JsonNode mdValues = mdPage.get("value");
 
     if (mdValues == null || !mdValues.isArray() || mdValues.isEmpty()) {
-      // Device is not currently represented as an enrolled Intune managedDevice.
       return DeviceRef.skipped(
           azureAdDeviceId, displayName, "Not enrolled in Intune (no managedDevice match)");
     }
 
-    // If multiple, pick the first for now. (We can refine selection rules later.)
     JsonNode md = mdValues.get(0);
     String managedDeviceId = text(md, "id");
     String deviceName = firstNonBlank(text(md, "deviceName"), displayName);
@@ -169,7 +275,6 @@ public final class GroupDeviceResolver {
     String primaryUser = text(md, "userPrincipalName");
 
     if (managedDeviceId == null || managedDeviceId.isBlank()) {
-      // Defensive check for malformed responses.
       return DeviceRef.skipped(azureAdDeviceId, displayName, "managedDevice id missing");
     }
 
@@ -196,6 +301,4 @@ public final class GroupDeviceResolver {
   }
 
   private record IndexedDeviceRef(int index, DeviceRef deviceRef) {}
-
 }
-

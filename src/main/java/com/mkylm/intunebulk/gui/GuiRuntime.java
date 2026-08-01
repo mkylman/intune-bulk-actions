@@ -31,9 +31,13 @@ final class GuiRuntime {
   DefaultTableModel resultsModel;
   TableRowSorter<DefaultTableModel> resultsSorter;
   JTextField resultsFilterField;
+  private ResultsEntityType resultsEntityType = ResultsEntityType.NONE;
+  private int resultsEntityIdColumn = -1;
+  private int resultsEntityNameColumn = 0;
   private long progressStartedAtMs;
   private final Map<String, CachedGroupDevices> groupDevicesCache = new HashMap<>();
   private final Map<String, List<String[]>> reportRowsCache = new HashMap<>();
+  private final Map<String, List<String[]>> userGroupMembersCache = new HashMap<>();
 
   GraphClient graph() {
     if (graph == null) {
@@ -60,6 +64,39 @@ final class GuiRuntime {
     List<DeviceRef> resolved = List.copyOf(groupResolver().resolveFromAadGroup(groupId));
     groupDevicesCache.put(groupId, new CachedGroupDevices(resolved, now.plus(GROUP_DEVICE_CACHE_TTL)));
     return resolved;
+  }
+
+  synchronized List<String[]> loadUserGroupMemberRows(String groupId) {
+    if (groupId == null || groupId.isBlank()) {
+      throw new IllegalArgumentException("Group id is required.");
+    }
+    List<String[]> cached = userGroupMembersCache.get(groupId);
+    if (cached != null) {
+      return copyRows(cached);
+    }
+
+    String path =
+        "/groups/"
+            + groupId
+            + "/transitiveMembers/microsoft.graph.user?$select="
+            + java.net.URLEncoder.encode(
+                "id,displayName,userPrincipalName", java.nio.charset.StandardCharsets.UTF_8);
+    List<JsonNode> rows = graph().getV1PagedValues(path);
+    List<String[]> tableRows = new ArrayList<>();
+    for (JsonNode row : rows) {
+      tableRows.add(
+          new String[] {
+            textAtPath(row, "displayName"),
+            textAtPath(row, "userPrincipalName"),
+            textAtPath(row, "id")
+          });
+    }
+    tableRows.sort(
+        Comparator.comparing(
+            row -> row == null || row.length == 0 || row[0] == null ? "" : row[0],
+            String.CASE_INSENSITIVE_ORDER));
+    userGroupMembersCache.put(groupId, copyRows(tableRows));
+    return copyRows(tableRows);
   }
 
   synchronized List<String[]> loadReportRows(ReportDefinition report) {
@@ -111,6 +148,83 @@ final class GuiRuntime {
       return;
     }
     resultsSorter.setRowFilter(RowFilter.regexFilter("(?i)" + java.util.regex.Pattern.quote(query.trim())));
+  }
+
+  void updateResultsEntityMetadata(String[] columns) {
+    if (columns == null) {
+      clearResultsEntityMetadata();
+      return;
+    }
+    int managedDeviceIdCol = findColumnIndex(columns, "Managed Device ID");
+    if (managedDeviceIdCol >= 0) {
+      resultsEntityType = ResultsEntityType.DEVICE;
+      resultsEntityIdColumn = managedDeviceIdCol;
+      resultsEntityNameColumn = firstPresentColumn(columns, 0, "Device Name", "Device", "Display Name");
+      return;
+    }
+    int userIdCol = findColumnIndex(columns, "User ID");
+    if (userIdCol >= 0) {
+      resultsEntityType = ResultsEntityType.USER;
+      resultsEntityIdColumn = userIdCol;
+      resultsEntityNameColumn = firstPresentColumn(columns, 0, "Display Name", "Name");
+      return;
+    }
+    clearResultsEntityMetadata();
+  }
+
+  void clearResultsEntityMetadata() {
+    resultsEntityType = ResultsEntityType.NONE;
+    resultsEntityIdColumn = -1;
+    resultsEntityNameColumn = 0;
+  }
+
+  ResultsEntityType resultsEntityType() {
+    return resultsEntityType;
+  }
+
+  String resultsEntityIdAtViewRow(int viewRow) {
+    return cellAtViewRow(viewRow, resultsEntityIdColumn);
+  }
+
+  String resultsEntityNameAtViewRow(int viewRow) {
+    return cellAtViewRow(viewRow, resultsEntityNameColumn);
+  }
+
+  private String cellAtViewRow(int viewRow, int column) {
+    if (resultsTable == null || resultsModel == null || column < 0) {
+      return "";
+    }
+    if (viewRow < 0 || viewRow >= resultsTable.getRowCount()) {
+      return "";
+    }
+    int modelRow = resultsTable.convertRowIndexToModel(viewRow);
+    if (modelRow < 0 || modelRow >= resultsModel.getRowCount()) {
+      return "";
+    }
+    if (column >= resultsModel.getColumnCount()) {
+      return "";
+    }
+    Object value = resultsModel.getValueAt(modelRow, column);
+    return value == null ? "" : String.valueOf(value);
+  }
+
+  private static int findColumnIndex(String[] columns, String name) {
+    for (int i = 0; i < columns.length; i++) {
+      if (name.equals(columns[i])) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private static int firstPresentColumn(String[] columns, int fallback, String... names) {
+    for (String name : names) {
+      int idx = findColumnIndex(columns, name);
+      if (idx >= 0) {
+        return idx;
+      }
+    }
+    return fallback;
   }
 
   void startProgressTimer() {

@@ -67,6 +67,7 @@ final class GuiResultsPanel {
     runtime.resultsTable.setRowSorter(runtime.resultsSorter);
     runtime.applyResultsFilter();
     runtime.resultsTable.setRowHeight(24);
+    ResultsContextMenu.install(runtime);
     JScrollPane pane = new JScrollPane(runtime.resultsTable);
     pane.setPreferredSize(new Dimension(860, 320));
     panel.add(pane, BorderLayout.CENTER);

@@ -1,7 +1,6 @@
 package com.mkylm.intunebulk.gui;
 
 import java.awt.BorderLayout;
-import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
 import javax.swing.BorderFactory;
@@ -12,6 +11,25 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 final class GuiActionPanel {
+  static final String DEVICE_ACTION_GROUP_MEMBERS = "Group Members";
+  static final String DEVICE_ACTION_SYNC = "Sync Group";
+  static final String DEVICE_ACTION_REBOOT = "Reboot Group";
+  static final String DEVICE_ACTION_REMOVE_PRIMARY_USER = "Remove Primary User Group";
+  static final String DEVICE_ACTION_SHOW_ADVANCED = "Show advanced...";
+  static final String DEVICE_ACTION_HIDE_ADVANCED = "Hide advanced...";
+
+  private static final String[] BASIC_DEVICE_ACTIONS = {
+    DEVICE_ACTION_GROUP_MEMBERS, DEVICE_ACTION_SYNC, DEVICE_ACTION_SHOW_ADVANCED
+  };
+
+  private static final String[] ADVANCED_DEVICE_ACTIONS = {
+    DEVICE_ACTION_GROUP_MEMBERS,
+    DEVICE_ACTION_SYNC,
+    DEVICE_ACTION_REBOOT,
+    DEVICE_ACTION_REMOVE_PRIMARY_USER,
+    DEVICE_ACTION_HIDE_ADVANCED
+  };
+
   static Controls build(ReportRegistry reportRegistry) {
     JPanel panel = new JPanel(new BorderLayout());
     panel.setBorder(BorderFactory.createTitledBorder("Run Queries and Actions"));
@@ -27,17 +45,25 @@ final class GuiActionPanel {
       }
     }
     reportsDropdown.setPrototypeDisplayValue(prototype);
+
     JButton userGroupMembersButton = new JButton("Group Members");
-    JButton deviceGroupMembersButton = new JButton("Group Members");
-    JButton syncGroupButton = new JButton("Sync Group");
-    JButton rebootGroupButton = new JButton("Reboot Group");
-    JButton removePrimaryUserGroupButton = new JButton("Remove Primary User Group");
     JComboBox<GroupOption> userGroupDropdown = new JComboBox<>();
     userGroupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
     userGroupDropdown.setEnabled(false);
+
     JComboBox<GroupOption> deviceGroupDropdown = new JComboBox<>();
     deviceGroupDropdown.setPrototypeDisplayValue(new GroupOption("WWWWWWWWWWWWWWWWWWWWWWWWWWWW", "id"));
     deviceGroupDropdown.setEnabled(false);
+
+    JComboBox<String> deviceGroupActionsDropdown = new JComboBox<>();
+    deviceGroupActionsDropdown.setModel(new DefaultComboBoxModel<>(BASIC_DEVICE_ACTIONS));
+    deviceGroupActionsDropdown.setPrototypeDisplayValue(DEVICE_ACTION_REMOVE_PRIMARY_USER);
+    deviceGroupActionsDropdown.setEnabled(false);
+    deviceGroupActionsDropdown.addActionListener(
+        event -> handleDeviceActionSelectionChange(deviceGroupActionsDropdown));
+    JButton runDeviceGroupActionButton = new JButton("Run");
+    runDeviceGroupActionButton.setEnabled(false);
+
     JLabel statusLabel = new JLabel("Ready.");
 
     JPanel queryButtonsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -53,29 +79,13 @@ final class GuiActionPanel {
     JPanel deviceGroupSelectionRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
     deviceGroupSelectionRow.add(new JLabel("Device Groups:"));
     deviceGroupSelectionRow.add(deviceGroupDropdown);
-    deviceGroupSelectionRow.add(deviceGroupMembersButton);
+    deviceGroupSelectionRow.add(deviceGroupActionsDropdown);
+    deviceGroupSelectionRow.add(runDeviceGroupActionButton);
 
-    JPanel syncGroupRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    syncGroupRow.add(syncGroupButton);
-
-    JPanel destructiveActionsRow = new JPanel(new FlowLayout(FlowLayout.LEFT));
-    rebootGroupButton.setBackground(new Color(255, 204, 0));
-    rebootGroupButton.setForeground(Color.BLACK);
-    rebootGroupButton.setOpaque(true);
-    rebootGroupButton.setBorderPainted(false);
-    removePrimaryUserGroupButton.setBackground(new Color(192, 0, 0));
-    removePrimaryUserGroupButton.setForeground(Color.WHITE);
-    removePrimaryUserGroupButton.setOpaque(true);
-    removePrimaryUserGroupButton.setBorderPainted(false);
-    destructiveActionsRow.add(rebootGroupButton);
-    destructiveActionsRow.add(removePrimaryUserGroupButton);
-
-    JPanel rows = new JPanel(new GridLayout(5, 1, 0, 4));
+    JPanel rows = new JPanel(new GridLayout(3, 1, 0, 4));
     rows.add(queryButtonsRow);
     rows.add(userGroupSelectionRow);
     rows.add(deviceGroupSelectionRow);
-    rows.add(syncGroupRow);
-    rows.add(destructiveActionsRow);
     panel.add(rows, BorderLayout.CENTER);
     panel.add(statusLabel, BorderLayout.SOUTH);
 
@@ -84,13 +94,29 @@ final class GuiActionPanel {
         runReportButton,
         reportsDropdown,
         userGroupMembersButton,
-        deviceGroupMembersButton,
-        syncGroupButton,
-        rebootGroupButton,
-        removePrimaryUserGroupButton,
+        deviceGroupActionsDropdown,
+        runDeviceGroupActionButton,
         userGroupDropdown,
         deviceGroupDropdown,
         statusLabel);
+  }
+
+  static boolean isDeviceActionMeta(String action) {
+    return DEVICE_ACTION_SHOW_ADVANCED.equals(action) || DEVICE_ACTION_HIDE_ADVANCED.equals(action);
+  }
+
+  private static void handleDeviceActionSelectionChange(JComboBox<String> dropdown) {
+    String selected = (String) dropdown.getSelectedItem();
+    if (DEVICE_ACTION_SHOW_ADVANCED.equals(selected)) {
+      dropdown.setModel(new DefaultComboBoxModel<>(ADVANCED_DEVICE_ACTIONS));
+      dropdown.setSelectedItem(DEVICE_ACTION_REBOOT);
+      dropdown.showPopup();
+      return;
+    }
+    if (DEVICE_ACTION_HIDE_ADVANCED.equals(selected)) {
+      dropdown.setModel(new DefaultComboBoxModel<>(BASIC_DEVICE_ACTIONS));
+      dropdown.setSelectedItem(DEVICE_ACTION_GROUP_MEMBERS);
+    }
   }
 
   static final class Controls {
@@ -98,10 +124,8 @@ final class GuiActionPanel {
     final JButton runReportButton;
     final JComboBox<String> reportsDropdown;
     final JButton userGroupMembersButton;
-    final JButton deviceGroupMembersButton;
-    final JButton syncGroupButton;
-    final JButton rebootGroupButton;
-    final JButton removePrimaryUserGroupButton;
+    final JComboBox<String> deviceGroupActionsDropdown;
+    final JButton runDeviceGroupActionButton;
     final JComboBox<GroupOption> userGroupDropdown;
     final JComboBox<GroupOption> deviceGroupDropdown;
     final JLabel statusLabel;
@@ -111,10 +135,8 @@ final class GuiActionPanel {
         JButton runReportButton,
         JComboBox<String> reportsDropdown,
         JButton userGroupMembersButton,
-        JButton deviceGroupMembersButton,
-        JButton syncGroupButton,
-        JButton rebootGroupButton,
-        JButton removePrimaryUserGroupButton,
+        JComboBox<String> deviceGroupActionsDropdown,
+        JButton runDeviceGroupActionButton,
         JComboBox<GroupOption> userGroupDropdown,
         JComboBox<GroupOption> deviceGroupDropdown,
         JLabel statusLabel) {
@@ -122,10 +144,8 @@ final class GuiActionPanel {
       this.runReportButton = runReportButton;
       this.reportsDropdown = reportsDropdown;
       this.userGroupMembersButton = userGroupMembersButton;
-      this.deviceGroupMembersButton = deviceGroupMembersButton;
-      this.syncGroupButton = syncGroupButton;
-      this.rebootGroupButton = rebootGroupButton;
-      this.removePrimaryUserGroupButton = removePrimaryUserGroupButton;
+      this.deviceGroupActionsDropdown = deviceGroupActionsDropdown;
+      this.runDeviceGroupActionButton = runDeviceGroupActionButton;
       this.userGroupDropdown = userGroupDropdown;
       this.deviceGroupDropdown = deviceGroupDropdown;
       this.statusLabel = statusLabel;
