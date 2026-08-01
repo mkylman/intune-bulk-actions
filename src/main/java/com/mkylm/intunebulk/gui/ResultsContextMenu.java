@@ -57,7 +57,12 @@ final class ResultsContextMenu {
       menu.add(reboot);
     } else if (type == ResultsEntityType.USER) {
       JMenuItem resetPassword = new JMenuItem("Reset password");
-      resetPassword.addActionListener(event -> resetPasswordStub(parent));
+      resetPassword.addActionListener(
+          event ->
+              PasswordResetDialog.show(
+                  parent,
+                  runtime.resultsEntityNameAtViewRow(viewRow),
+                  runtime.resultsEntityIdAtViewRow(viewRow)));
       menu.add(resetPassword);
     }
     return menu;
@@ -139,14 +144,6 @@ final class ResultsContextMenu {
         }
       }
     }.execute();
-  }
-
-  private static void resetPasswordStub(Component parent) {
-    JOptionPane.showMessageDialog(
-        parent,
-        "Password reset is not implemented yet.",
-        "Reset password",
-        JOptionPane.INFORMATION_MESSAGE);
   }
 
   private ResultsContextMenu() {}
