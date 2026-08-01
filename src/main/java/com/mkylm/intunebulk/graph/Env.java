@@ -10,7 +10,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.StringTokenizer;
+import java.util.concurrent.atomic.AtomicReference;
+import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 
 /** Small helper for strongly-typed environment variable parsing. */
 final class Env {
@@ -137,18 +143,24 @@ final class Env {
     if (hasValue(parsedValues, "INTUNE_TENANT_ID") && hasValue(parsedValues, "INTUNE_CLIENT_ID")) {
       return parsedValues;
     }
-
-    String tenantId = promptForConfigValue("INTUNE_TENANT_ID");
-    if (tenantId == null || tenantId.isBlank()) {
+    if (Boolean.parseBoolean(System.getProperty("intune.gui.suppressConfigPrompt", "false"))) {
       return parsedValues;
     }
-    String clientId = promptForConfigValue("INTUNE_CLIENT_ID");
-    if (clientId == null || clientId.isBlank()) {
+
+    ConfigPair valuesToSave =
+        promptForTenantAndClient(
+            parsedValues.getOrDefault("INTUNE_TENANT_ID", ""),
+            parsedValues.getOrDefault("INTUNE_CLIENT_ID", ""));
+    if (valuesToSave == null
+        || valuesToSave.tenantId() == null
+        || valuesToSave.clientId() == null
+        || valuesToSave.tenantId().isBlank()
+        || valuesToSave.clientId().isBlank()) {
       return parsedValues;
     }
 
     try {
-      writeConfigValues(cfgPath, tenantId.trim(), clientId.trim());
+      writeConfigValues(cfgPath, valuesToSave.tenantId().trim(), valuesToSave.clientId().trim());
       return parseConfigFile(cfgPath);
     } catch (IOException e) {
       throw new IllegalStateException("Failed writing config file: " + cfgPath, e);
@@ -160,17 +172,60 @@ final class Env {
     return v != null && !v.isBlank();
   }
 
-  private static String promptForConfigValue(String key) {
-    String prompt = "Enter value for " + key + ":";
+  private static ConfigPair promptForTenantAndClient(String tenantIdDefault, String clientIdDefault) {
     if (!GraphicsEnvironment.isHeadless()) {
-      return JOptionPane.showInputDialog(null, prompt, "ibt.cfg Setup", JOptionPane.QUESTION_MESSAGE);
+      return promptForTenantAndClientDialog(tenantIdDefault, clientIdDefault);
     }
     java.io.Console console = System.console();
     if (console != null) {
-      return console.readLine("%s ", prompt);
+      String tenantId = console.readLine("%s ", "Enter value for INTUNE_TENANT_ID:");
+      String clientId = console.readLine("%s ", "Enter value for INTUNE_CLIENT_ID:");
+      return new ConfigPair(tenantId, clientId);
     }
     throw new IllegalStateException(
-        "Missing value for " + key + " in ibt.cfg and no interactive prompt is available.");
+        "Missing values for INTUNE_TENANT_ID/INTUNE_CLIENT_ID in ibt.cfg and no interactive prompt is available.");
+  }
+
+  private static ConfigPair promptForTenantAndClientDialog(
+      String tenantIdDefault, String clientIdDefault) {
+    AtomicReference<ConfigPair> resultRef = new AtomicReference<>();
+    Runnable dialogWork =
+        () -> {
+          JPanel panel = new JPanel(new java.awt.GridLayout(0, 1, 0, 6));
+          panel.add(new JLabel("INTUNE_TENANT_ID"));
+          JTextField tenantField = new JTextField(tenantIdDefault == null ? "" : tenantIdDefault, 42);
+          panel.add(tenantField);
+          panel.add(new JLabel("INTUNE_CLIENT_ID"));
+          JTextField clientField = new JTextField(clientIdDefault == null ? "" : clientIdDefault, 42);
+          panel.add(clientField);
+
+          JOptionPane optionPane =
+              new JOptionPane(panel, JOptionPane.QUESTION_MESSAGE, JOptionPane.OK_CANCEL_OPTION);
+          JDialog dialog = optionPane.createDialog(null, "ibt.cfg Setup");
+          dialog.setAlwaysOnTop(true);
+          dialog.toFront();
+          dialog.requestFocus();
+          dialog.setVisible(true);
+
+          Object selected = optionPane.getValue();
+          if (selected instanceof Integer choice && choice == JOptionPane.OK_OPTION) {
+            resultRef.set(new ConfigPair(tenantField.getText(), clientField.getText()));
+          } else {
+            resultRef.set(null);
+          }
+          dialog.dispose();
+        };
+
+    try {
+      if (SwingUtilities.isEventDispatchThread()) {
+        dialogWork.run();
+      } else {
+        SwingUtilities.invokeAndWait(dialogWork);
+      }
+      return resultRef.get();
+    } catch (Exception e) {
+      throw new IllegalStateException("Failed to show ibt.cfg setup prompt.", e);
+    }
   }
 
   private static void writeConfigValues(Path cfgPath, String tenantId, String clientId) throws IOException {
@@ -206,6 +261,12 @@ final class Env {
 
   private static List<Path> resolveConfigPaths() {
     List<Path> candidates = new ArrayList<>();
+
+    String explicitProperty = System.getProperty("intune.config.file");
+    if (explicitProperty != null && !explicitProperty.isBlank()) {
+      candidates.add(Path.of(explicitProperty.trim()));
+      return candidates;
+    }
 
     String explicit = System.getenv("INTUNE_CONFIG_FILE");
     if (explicit != null && !explicit.isBlank()) {
@@ -253,6 +314,8 @@ final class Env {
     }
     return null;
   }
+
+  private record ConfigPair(String tenantId, String clientId) {}
 
   private Env() {}
 }

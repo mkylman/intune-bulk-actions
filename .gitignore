@@ -1,7 +1,9 @@
 /dist
 /out
 /out-mini
-README copy.md
 /target
 /dist-new
 /.idea
+/target
+ibt.cfg
+README copy.md
